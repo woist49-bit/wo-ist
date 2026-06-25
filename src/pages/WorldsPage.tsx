@@ -2,10 +2,9 @@ import { useState, useEffect, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { signOut } from '../stores/auth'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
-import { Card } from '../components/ui/Card'
+import { GameCard } from '../components/ui/GameCard'
 import type { World } from '../types'
 
 export function WorldsPage() {
@@ -75,78 +74,74 @@ export function WorldsPage() {
 
   return (
     <div className="p-4">
-      <div className="max-w-lg mx-auto pt-4">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Hallo, {profile?.username} 👋</h1>
-            <p className="text-white/50 text-sm mt-0.5">Deine Spielwelten</p>
-          </div>
-          <button onClick={() => signOut()} className="text-white/40 hover:text-white/70 text-sm transition-colors">
-            Abmelden
-          </button>
+      <div className="max-w-lg mx-auto pt-3">
+        <div className="mb-6">
+          <h1 className="text-2xl font-extrabold text-white">Hallo, {profile?.username} 👋</h1>
+          <p className="text-white/50 text-sm mt-0.5">Deine Spielwelten</p>
         </div>
 
         <div className="flex gap-3 mb-6">
           <Button onClick={() => { setShowCreate(true); setShowJoin(false); setError('') }} variant="primary" className="flex-1">
             + Erstellen
           </Button>
-          <Button onClick={() => { setShowJoin(true); setShowCreate(false); setError('') }} variant="secondary" className="flex-1">
+          <Button onClick={() => { setShowJoin(true); setShowCreate(false); setError('') }} variant="info" className="flex-1">
             Beitreten
           </Button>
         </div>
 
         {showCreate && (
-          <Card className="mb-4">
+          <GameCard className="mb-4">
             <form onSubmit={createWorld} className="flex flex-col gap-3">
-              <h2 className="font-semibold text-white">Neue Spielwelt</h2>
-              <Input placeholder="Name der Spielwelt" value={newName} onChange={e => setNewName(e.target.value)} autoFocus />
-              {error && <p className="text-red-400 text-sm">{error}</p>}
+              <h2 className="font-extrabold text-slate-800">Neue Spielwelt</h2>
+              <Input tone="light" placeholder="Name der Spielwelt" value={newName} onChange={e => setNewName(e.target.value)} autoFocus />
+              {error && <p className="text-red-600 text-sm font-medium">{error}</p>}
               <div className="flex gap-2">
-                <Button type="submit" loading={loading} className="flex-1">Erstellen</Button>
-                <Button type="button" variant="ghost" onClick={() => setShowCreate(false)}>Abbrechen</Button>
+                <Button type="submit" variant="success" loading={loading} className="flex-1">Erstellen</Button>
+                <Button type="button" variant="secondary" onClick={() => setShowCreate(false)}>Abbrechen</Button>
               </div>
             </form>
-          </Card>
+          </GameCard>
         )}
 
         {showJoin && (
-          <Card className="mb-4">
+          <GameCard className="mb-4">
             <form onSubmit={joinWorld} className="flex flex-col gap-3">
-              <h2 className="font-semibold text-white">Spielwelt beitreten</h2>
+              <h2 className="font-extrabold text-slate-800">Spielwelt beitreten</h2>
               <Input
+                tone="light"
                 placeholder="Einladungscode (z. B. AB12CD)"
                 value={joinCode}
                 onChange={e => setJoinCode(e.target.value)}
                 autoCapitalize="characters"
                 autoFocus
               />
-              {error && <p className="text-red-400 text-sm">{error}</p>}
+              {error && <p className="text-red-600 text-sm font-medium">{error}</p>}
               <div className="flex gap-2">
-                <Button type="submit" loading={loading} className="flex-1">Beitreten</Button>
-                <Button type="button" variant="ghost" onClick={() => setShowJoin(false)}>Abbrechen</Button>
+                <Button type="submit" variant="success" loading={loading} className="flex-1">Beitreten</Button>
+                <Button type="button" variant="secondary" onClick={() => setShowJoin(false)}>Abbrechen</Button>
               </div>
             </form>
-          </Card>
+          </GameCard>
         )}
 
         {worlds.length === 0 ? (
-          <Card className="text-center py-12 text-white/40">
+          <GameCard className="text-center py-12 text-slate-500">
             <p className="text-4xl mb-3">🌍</p>
-            <p>Noch keine Spielwelten.<br />Erstelle eine oder tritt bei!</p>
-          </Card>
+            <p className="font-semibold">Noch keine Spielwelten.<br />Erstelle eine oder tritt bei!</p>
+          </GameCard>
         ) : (
           <div className="flex flex-col gap-3">
             {worlds.map(w => (
-              <button key={w.id} onClick={() => navigate(`/world/${w.id}`)} className="w-full text-left">
-                <Card className="hover:bg-white/10 active:bg-white/5 transition-colors cursor-pointer">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-white">{w.name}</p>
-                      <p className="text-white/40 text-sm mt-0.5">Code: {w.join_code}</p>
+              <button key={w.id} onClick={() => navigate(`/world/${w.id}`)} className="w-full text-left active:translate-y-[2px] transition-transform">
+                <GameCard>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-extrabold text-slate-800 truncate">{w.name}</p>
+                      <p className="text-slate-500 text-sm mt-0.5">Code: {w.join_code}</p>
                     </div>
-                    <span className="text-white/30">›</span>
+                    <span className="text-slate-400 text-xl flex-shrink-0">›</span>
                   </div>
-                </Card>
+                </GameCard>
               </button>
             ))}
           </div>

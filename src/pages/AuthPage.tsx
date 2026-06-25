@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { signIn, signUp } from '../stores/auth'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
+import { GameCard } from '../components/ui/GameCard'
 
 export function AuthPage() {
   const [mode, setMode] = useState<'login' | 'register'>('login')
@@ -27,21 +28,21 @@ export function AuthPage() {
   }
 
   return (
-    <div className="h-full overflow-y-auto overscroll-none bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 flex flex-col items-center justify-center p-6">
+    <div className="h-full overflow-y-auto overscroll-none bg-gradient-to-br from-violet-600 via-indigo-700 to-indigo-900 flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-sm">
-        <div className="text-center mb-10">
-          <div className="text-6xl mb-4">🔍</div>
-          <h1 className="text-3xl font-bold text-white">Wo ist...?</h1>
-          <p className="text-white/50 mt-2">Finde Paul im Urlaub</p>
+        <div className="text-center mb-8">
+          <div className="text-6xl mb-3">🔍</div>
+          <h1 className="text-4xl font-extrabold text-white drop-shadow">Wo ist...?</h1>
+          <p className="text-white/70 mt-2 font-medium">Finde Paul im Urlaub</p>
         </div>
 
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
-          <div className="flex rounded-xl overflow-hidden border border-white/10 mb-6">
+        <GameCard className="!p-5">
+          <div className="flex rounded-2xl bg-[#efe2c4] p-1 mb-5">
             {(['login', 'register'] as const).map(m => (
               <button
                 key={m}
                 onClick={() => { setMode(m); setError('') }}
-                className={`flex-1 py-2.5 text-sm font-medium transition-colors ${mode === m ? 'bg-indigo-600 text-white' : 'text-white/50 hover:text-white'}`}
+                className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-all ${mode === m ? 'bg-violet-500 text-white shadow-[0_2px_0_#5b21b6]' : 'text-slate-500'}`}
               >
                 {m === 'login' ? 'Anmelden' : 'Registrieren'}
               </button>
@@ -51,6 +52,7 @@ export function AuthPage() {
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <Input
               label="Benutzername"
+              tone="light"
               placeholder="dein_name"
               value={username}
               onChange={e => setUsername(e.target.value)}
@@ -59,18 +61,19 @@ export function AuthPage() {
             />
             <Input
               label="Passwort"
+              tone="light"
               type="password"
               placeholder="••••••••"
               value={password}
               onChange={e => setPassword(e.target.value)}
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
             />
-            {error && <p className="text-red-400 text-sm text-center">{error}</p>}
-            <Button type="submit" size="lg" loading={loading} className="w-full mt-2">
+            {error && <p className="text-red-600 text-sm text-center font-medium">{error}</p>}
+            <Button type="submit" variant="success" size="lg" loading={loading} className="w-full mt-1">
               {mode === 'login' ? 'Anmelden' : 'Konto erstellen'}
             </Button>
           </form>
-        </div>
+        </GameCard>
       </div>
     </div>
   )

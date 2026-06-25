@@ -10,6 +10,8 @@ export interface Profile {
 export interface World {
   id: string
   name: string
+  description: string | null
+  whatsapp_link: string | null
   join_code: string
   created_by: string
   created_at: string

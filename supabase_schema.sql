@@ -21,10 +21,16 @@ create table profiles (
 create table worlds (
   id uuid primary key default gen_random_uuid(),
   name text not null,
+  description text,
+  whatsapp_link text,
   join_code text unique not null,
   created_by uuid references profiles(id),
   created_at timestamptz not null default now()
 );
+
+-- Für bestehende Datenbanken (Spalten nachrüsten):
+alter table worlds add column if not exists description text;
+alter table worlds add column if not exists whatsapp_link text;
 
 create table world_members (
   world_id uuid references worlds(id) on delete cascade,
@@ -120,6 +126,8 @@ create policy "Members can view their worlds" on worlds for select
   using (exists (select 1 from world_members where world_id = worlds.id and user_id = auth.uid()));
 create policy "Authenticated users can create worlds" on worlds for insert
   with check (auth.uid() = created_by);
+create policy "Admins can update their world" on worlds for update
+  using (exists (select 1 from world_members where world_id = worlds.id and user_id = auth.uid() and role = 'admin'));
 
 -- world_members
 create policy "Members can view memberships" on world_members for select
