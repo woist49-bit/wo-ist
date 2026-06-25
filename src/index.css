@@ -20,6 +20,7 @@ html, body {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   touch-action: manipulation;
+  background-color: #0f172a; /* Slate-900 – füllt Safe-Area-Ränder dunkel statt weiß */
 }
 
 body {
