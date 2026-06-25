@@ -1,0 +1,14 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+
+# Environment / Secrets
+.env
+.env.local
+*.local
+
+# Editor / Tooling
+.claude/settings.local.json
+.DS_Store
