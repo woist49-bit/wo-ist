@@ -24,9 +24,10 @@ function ProfileButton({ onClick }: { onClick: () => void }) {
 }
 
 // onBack optional: ohne Back-Button (Hauptmenü) bleibt links ein Platzhalter, damit Profil rechts steht.
-function HeaderBar({ onBack, onProfile }: { onBack?: () => void; onProfile: () => void }) {
+// bg optional: auf der Welt-Startseite die Hero-Farbe, damit oben alles ein zusammenhängender Block ist.
+function HeaderBar({ onBack, onProfile, bg = '' }: { onBack?: () => void; onProfile: () => void; bg?: string }) {
   return (
-    <header className="px-3 pb-2 safe-top flex items-center justify-between flex-shrink-0">
+    <header className={`px-3 pb-2 safe-top flex items-center justify-between flex-shrink-0 ${bg}`}>
       {onBack
         ? <IconButton variant="grey" onClick={onBack} aria-label="Zurück"><ChevronLeft size={24} strokeWidth={2.5} /></IconButton>
         : <div className="w-12" />}
@@ -76,7 +77,7 @@ export function WorldLayout() {
 
   return (
     <div className={BG_WORLD}>
-      <HeaderBar onBack={handleBack} onProfile={() => navigate('profile')} />
+      <HeaderBar onBack={handleBack} onProfile={() => navigate('profile')} bg={onWorldHome ? 'bg-sky-600' : ''} />
 
       <main className="flex-1 overflow-y-auto overflow-x-hidden overscroll-none min-h-0">
         <Outlet />
