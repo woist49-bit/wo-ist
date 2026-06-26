@@ -5,7 +5,9 @@ import { useToast } from '../../stores/toast'
 import { signOut } from '../../stores/auth'
 import { IconButton } from '../ui/IconButton'
 
-const BG = 'h-full bg-gradient-to-b from-slate-600 via-slate-700 to-slate-800 text-white flex flex-col overflow-hidden'
+// Hauptmenü (Teal) und Welt (Slate) bewusst unterschiedlich, damit man sie nicht verwechselt.
+const BG_APP = 'h-full bg-gradient-to-b from-teal-700 via-teal-800 to-slate-800 text-white flex flex-col overflow-hidden'
+const BG_WORLD = 'h-full bg-gradient-to-b from-slate-600 via-slate-700 to-slate-800 text-white flex flex-col overflow-hidden'
 
 function ProfileButton({ onClick }: { onClick: () => void }) {
   const { profile } = useAuth()
@@ -21,10 +23,13 @@ function ProfileButton({ onClick }: { onClick: () => void }) {
   )
 }
 
-function HeaderBar({ onBack, onProfile }: { onBack: () => void; onProfile: () => void }) {
+// onBack optional: ohne Back-Button (Hauptmenü) bleibt links ein Platzhalter, damit Profil rechts steht.
+function HeaderBar({ onBack, onProfile }: { onBack?: () => void; onProfile: () => void }) {
   return (
     <header className="px-3 pb-2 safe-top flex items-center justify-between flex-shrink-0">
-      <IconButton variant="grey" onClick={onBack} aria-label="Zurück"><ChevronLeft size={24} strokeWidth={2.5} /></IconButton>
+      {onBack
+        ? <IconButton variant="grey" onClick={onBack} aria-label="Zurück"><ChevronLeft size={24} strokeWidth={2.5} /></IconButton>
+        : <div className="w-12" />}
       <ProfileButton onClick={onProfile} />
     </header>
   )
@@ -35,8 +40,8 @@ export function AppLayout() {
   const navigate = useNavigate()
 
   return (
-    <div className={BG}>
-      <HeaderBar onBack={() => navigate(-1)} onProfile={() => navigate('/profile')} />
+    <div className={BG_APP}>
+      <HeaderBar onProfile={() => navigate('/profile')} />
 
       <main className="flex-1 overflow-y-auto overflow-x-hidden overscroll-none min-h-0">
         <Outlet />
@@ -70,7 +75,7 @@ export function WorldLayout() {
   }
 
   return (
-    <div className={BG}>
+    <div className={BG_WORLD}>
       <HeaderBar onBack={handleBack} onProfile={() => navigate('profile')} />
 
       <main className="flex-1 overflow-y-auto overflow-x-hidden overscroll-none min-h-0">
