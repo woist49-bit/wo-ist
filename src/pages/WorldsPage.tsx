@@ -14,6 +14,7 @@ export function WorldsPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [showJoin, setShowJoin] = useState(false)
   const [newName, setNewName] = useState('')
+  const [newDescription, setNewDescription] = useState('')
   const [joinCode, setJoinCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -38,12 +39,12 @@ export function WorldsPage() {
     const code = Math.random().toString(36).slice(2, 8).toUpperCase()
     const { data: world, error: err } = await supabase
       .from('worlds')
-      .insert({ name: newName.trim(), join_code: code, created_by: user.id })
+      .insert({ name: newName.trim(), description: newDescription.trim() || null, join_code: code, created_by: user.id })
       .select().single()
 
     if (err || !world) { setError(err?.message ?? 'Fehler'); setLoading(false); return }
     await supabase.from('world_members').insert({ world_id: world.id, user_id: user.id, role: 'admin' })
-    setLoading(false); setShowCreate(false); setNewName('')
+    setLoading(false); setShowCreate(false); setNewName(''); setNewDescription('')
     navigate(`/world/${world.id}`)
   }
 
@@ -94,6 +95,13 @@ export function WorldsPage() {
             <form onSubmit={createWorld} className="flex flex-col gap-3">
               <h2 className="font-extrabold text-slate-800">Neue Spielwelt</h2>
               <Input tone="light" placeholder="Name der Spielwelt" value={newName} onChange={e => setNewName(e.target.value)} autoFocus />
+              <textarea
+                placeholder="Beschreibung (optional)"
+                value={newDescription}
+                onChange={e => setNewDescription(e.target.value)}
+                rows={2}
+                className="w-full border-2 border-[#e6d3a3] rounded-xl px-4 py-3 bg-white text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-400 transition resize-none"
+              />
               {error && <p className="text-red-600 text-sm font-medium">{error}</p>}
               <div className="flex gap-2">
                 <Button type="submit" variant="success" loading={loading} className="flex-1">Erstellen</Button>
