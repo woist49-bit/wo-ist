@@ -28,7 +28,7 @@ export function AuthPage() {
   }
 
   return (
-    <div className="h-full overflow-y-auto overscroll-none bg-gradient-to-br from-violet-600 via-indigo-700 to-indigo-900 flex flex-col items-center justify-center p-6">
+    <div className="h-full overflow-y-auto overscroll-none bg-gradient-to-b from-slate-600 via-slate-700 to-slate-800 flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="text-6xl mb-3">🔍</div>

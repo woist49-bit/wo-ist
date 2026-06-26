@@ -18,8 +18,8 @@ export default defineConfig({
         name: 'Wo ist...?',
         short_name: 'Wo ist...?',
         description: 'Multiplayer Suchspiel – Finde Paul!',
-        theme_color: '#1e1b4b',
-        background_color: '#1e1b4b',
+        theme_color: '#475569',
+        background_color: '#334155',
         display: 'standalone',
         orientation: 'portrait',
         icons: [

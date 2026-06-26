@@ -20,7 +20,7 @@ html, body {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   touch-action: manipulation;
-  background-color: #1e1b4b; /* Indigo-950 – füllt Safe-Area-Ränder passend zum Violett-Theme */
+  background-color: #475569; /* Slate-600 – passt zum oberen Ende des neutralen Hintergrund-Verlaufs */
 }
 
 body {
