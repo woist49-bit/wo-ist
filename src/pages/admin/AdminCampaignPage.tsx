@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { Button } from '../../components/ui/Button'
-import { Card } from '../../components/ui/Card'
+import { GameCard } from '../../components/ui/GameCard'
 import { BoundingBoxEditor } from '../../components/marker/BoundingBoxEditor'
 import type { Campaign, EventImage } from '../../types'
 
@@ -79,46 +79,45 @@ export function AdminCampaignPage() {
   const isEventCampaign = !!campaign.original_event_id
 
   return (
-    <div className="p-4 max-w-2xl mx-auto pt-6">
-      <button onClick={() => navigate(`/world/${worldId}/admin`)} className="text-white/40 text-sm mb-4 hover:text-white/70">← Admin</button>
-      <h1 className="text-2xl font-bold text-white mb-1">{campaign.title}</h1>
-      <p className="text-white/40 text-sm mb-6">{campaign.is_legacy ? 'Legacy-Kampagne' : 'Event-Kampagne'}</p>
+    <div className="p-4 max-w-2xl mx-auto pt-4">
+      <h1 className="text-2xl font-extrabold text-white mb-1">{campaign.title}</h1>
+      <p className="text-white/50 text-sm mb-6">{campaign.is_legacy ? 'Legacy-Kampagne' : 'Event-Kampagne'}</p>
 
       {isEventCampaign ? (
-        <Card className="text-center py-8 text-white/50 text-sm">
+        <GameCard className="text-center py-8 text-slate-500 text-sm font-semibold">
           Diese Kampagne nutzt die Bilder des Original-Events.<br />Bearbeite die Markierungen direkt im Event.
-        </Card>
+        </GameCard>
       ) : (
         <>
-          <Card className="mb-6 p-6 border-indigo-500/30 bg-indigo-900/20">
-            <h2 className="font-semibold text-white mb-4">📷 Bild hochladen</h2>
+          <GameCard className="mb-6">
+            <h2 className="font-extrabold text-slate-800 mb-4">📷 Bild hochladen</h2>
             <input
               ref={fileRef}
               type="file"
               accept="image/*"
               onChange={e => setSelectedFile(e.target.files?.[0] ?? null)}
-              className="block w-full text-sm text-white/50 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer"
+              className="block w-full text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-violet-500 file:text-white file:font-bold hover:file:bg-violet-600 cursor-pointer"
             />
-            {selectedFile && <p className="text-xs text-indigo-300 mt-2">{selectedFile.name}</p>}
-            {uploadError && <p className="text-red-400 text-sm mt-2">{uploadError}</p>}
-            {selectedFile && <Button loading={uploading} onClick={uploadImage} className="w-full mt-3">Hochladen</Button>}
-          </Card>
+            {selectedFile && <p className="text-xs text-violet-600 font-medium mt-2">{selectedFile.name}</p>}
+            {uploadError && <p className="text-red-600 text-sm font-medium mt-2">{uploadError}</p>}
+            {selectedFile && <Button variant="success" loading={uploading} onClick={uploadImage} className="w-full mt-3">Hochladen</Button>}
+          </GameCard>
 
           {images.length === 0 ? (
-            <Card className="text-center py-12 text-white/40">
+            <GameCard className="text-center py-12 text-slate-400">
               <p className="text-4xl mb-3">📭</p>
-              <p>Keine Bilder. Lade oben welche hoch!</p>
-            </Card>
+              <p className="font-semibold">Keine Bilder. Lade oben welche hoch!</p>
+            </GameCard>
           ) : (
             <div className="flex flex-col gap-4">
-              <h2 className="text-sm font-medium text-white/50 uppercase tracking-wider">Bilder ({images.length})</h2>
+              <h2 className="text-sm font-bold text-white/60 uppercase tracking-wider">Bilder ({images.length})</h2>
               {images.map((img, idx) => (
-                <Card key={img.id} className={editingId === img.id ? 'border-yellow-500/50 bg-yellow-900/10' : ''}>
+                <GameCard key={img.id} className={editingId === img.id ? '!border-yellow-400' : ''}>
                   <div className="flex items-start gap-4">
-                    <img src={img.image_url} alt="" className="w-20 h-20 rounded-lg object-cover flex-shrink-0" />
+                    <img src={img.image_url} alt="" className="w-20 h-20 rounded-xl object-cover flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-white">Bild {idx + 1}</p>
-                      <p className="text-xs text-white/40 mt-1">{img.target_x !== 0.5 || img.target_y !== 0.5 ? '✓ Markiert' : '⚠ Noch nicht markiert'}</p>
+                      <p className="font-extrabold text-slate-800">Bild {idx + 1}</p>
+                      <p className="text-xs text-slate-500 mt-1">{img.target_x !== 0.5 || img.target_y !== 0.5 ? '✓ Markiert' : '⚠ Noch nicht markiert'}</p>
                     </div>
                     <div className="flex gap-2 flex-shrink-0">
                       <Button size="sm" variant="secondary" onClick={() => setEditingId(editingId === img.id ? null : img.id)}>
@@ -134,7 +133,7 @@ export function AdminCampaignPage() {
                       setEditingId(null)
                     }} />
                   )}
-                </Card>
+                </GameCard>
               ))}
             </div>
           )}
