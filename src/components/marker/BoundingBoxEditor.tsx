@@ -38,7 +38,7 @@ export function BoundingBoxEditor({ image, onSave }: { image: EventImage; onSave
   return (
     <div className="mt-4 p-4 bg-slate-800 rounded-2xl border border-slate-700">
       <p className="text-xs text-white/60 mb-3">
-        Tippe/klicke ins Bild um Paul zu markieren. Scrollen oder zwei Finger zum Zoomen, ziehen zum Verschieben.
+        Tippe/klicke ins Bild um die gesuchte Person zu markieren. Scrollen oder zwei Finger zum Zoomen, ziehen zum Verschieben.
       </p>
       <div className="mb-4 rounded-lg overflow-hidden">
         <ImageMarkerViewer

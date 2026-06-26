@@ -179,7 +179,7 @@ export function ImageGamePage() {
         {placing && (
           <>
             <span className="text-white/40 text-xs">
-              {practice ? 'Übungsmodus – keine Punkte' : 'Tippe auf das Bild um Paul zu markieren'}
+              {practice ? 'Übungsmodus – keine Punkte' : 'Tippe auf das Bild um die gesuchte Person zu markieren'}
             </span>
             {!practice && <span className="ml-auto text-white/70 text-sm font-mono font-bold">{String(elapsed).padStart(2, '0')}s</span>}
           </>

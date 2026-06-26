@@ -33,7 +33,7 @@ export function AuthPage() {
         <div className="text-center mb-8">
           <div className="text-6xl mb-3">🔍</div>
           <h1 className="text-4xl font-extrabold text-white drop-shadow">Wo ist...?</h1>
-          <p className="text-white/70 mt-2 font-medium">Finde Paul im Urlaub</p>
+          <p className="text-white/70 mt-2 font-medium">Finde die versteckte Person</p>
         </div>
 
         <GameCard className="!p-5">
