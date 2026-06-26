@@ -4,6 +4,7 @@ import { AppLayout, WorldLayout } from './components/layout/AppLayout'
 import { ToastProvider } from './stores/toast'
 import { ToastContainer } from './components/ui/ToastContainer'
 import { AuthPage } from './pages/AuthPage'
+import { DatenschutzPage } from './pages/DatenschutzPage'
 import { WorldsPage } from './pages/WorldsPage'
 import { WorldHomePage } from './pages/WorldHomePage'
 import { EventPage } from './pages/EventPage'
@@ -35,6 +36,7 @@ export function App() {
       <BrowserRouter>
       <Routes>
         <Route path="/" element={user ? <Navigate to="/worlds" replace /> : <AuthPage />} />
+        <Route path="/datenschutz" element={<DatenschutzPage />} />
         <Route element={<AppLayout />}>
           <Route path="/worlds" element={user ? <WorldsPage /> : <Navigate to="/" replace />} />
           <Route path="/leaderboard" element={user ? <LeaderboardPage /> : <Navigate to="/" replace />} />

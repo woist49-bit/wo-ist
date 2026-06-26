@@ -12,11 +12,33 @@ create extension if not exists "pgcrypto";
 create table profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   username text unique not null,
+  username_key text,
   global_xp integer not null default 0,
   global_level integer not null default 1,
   global_wins integer not null default 0,
   created_at timestamptz not null default now()
 );
+
+-- Normalisierter Benutzername (getrimmt, einfache Leerzeichen, kleingeschrieben) für Eindeutigkeit/Login
+alter table profiles add column if not exists username_key text;
+update profiles set username_key = lower(regexp_replace(trim(username), '\s+', ' ', 'g')) where username_key is null;
+create index if not exists profiles_username_key_idx on profiles (username_key);
+
+-- Echte E-Mail privat (nur zur Wiederherstellung) – getrennt von öffentlich lesbaren Profilen
+create table if not exists account_recovery (
+  user_id uuid primary key references profiles(id) on delete cascade,
+  email text not null,
+  created_at timestamptz not null default now()
+);
+alter table account_recovery enable row level security;
+create policy "Owner manages own recovery email" on account_recovery for all
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Prüft E-Mail-Eindeutigkeit, ohne fremde E-Mails offenzulegen
+create or replace function email_taken(p_email text) returns boolean
+language sql security definer as $$
+  select exists(select 1 from account_recovery where lower(email) = lower(trim(p_email)));
+$$;
 
 create table worlds (
   id uuid primary key default gen_random_uuid(),

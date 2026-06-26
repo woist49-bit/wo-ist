@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { signIn, signUp } from '../stores/auth'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
@@ -8,29 +8,52 @@ import { GameCard } from '../components/ui/GameCard'
 export function AuthPage() {
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [accepted, setAccepted] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
 
+  function switchMode(m: 'login' | 'register') {
+    setMode(m); setError(''); setPassword(''); setConfirm(''); setAccepted(false)
+  }
+
+  const canSubmit = mode === 'login'
+    ? !!username.trim() && !!password
+    : !!username.trim() && !!email.trim() && !!password && !!confirm && accepted
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    if (!username.trim() || !password) return
     setError('')
+
+    if (mode === 'login') {
+      if (!username.trim() || !password) { setError('Bitte fülle alle Felder aus.'); return }
+      setLoading(true)
+      const { error } = await signIn(username, password)
+      setLoading(false)
+      if (error) { setError(error); return }
+      navigate('/worlds')
+      return
+    }
+
+    // Registrierung
+    if (password.length < 8) { setError('Das Passwort muss mindestens 8 Zeichen lang sein.'); return }
+    if (password !== confirm) { setError('Die Passwörter stimmen nicht überein.'); return }
+    if (!accepted) { setError('Bitte akzeptiere die Datenschutzerklärung.'); return }
+
     setLoading(true)
-
-    const fn = mode === 'login' ? signIn : signUp
-    const { error } = await fn(username.trim(), password)
+    const { error } = await signUp(username, email, password)
     setLoading(false)
-
     if (error) { setError(error); return }
     navigate('/worlds')
   }
 
   return (
     <div className="h-full overflow-y-auto overscroll-none bg-gradient-to-b from-slate-600 via-slate-700 to-slate-800 flex flex-col items-center justify-center p-6">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
+      <div className="w-full max-w-sm py-6">
+        <div className="text-center mb-7">
           <div className="text-6xl mb-3">🔍</div>
           <h1 className="text-4xl font-extrabold text-white drop-shadow">Wo ist...?</h1>
           <p className="text-white/70 mt-2 font-medium">Finde die versteckte Person</p>
@@ -41,7 +64,8 @@ export function AuthPage() {
             {(['login', 'register'] as const).map(m => (
               <button
                 key={m}
-                onClick={() => { setMode(m); setError('') }}
+                type="button"
+                onClick={() => switchMode(m)}
                 className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-all ${mode === m ? 'bg-violet-500 text-white shadow-[0_2px_0_#5b21b6]' : 'text-slate-500'}`}
               >
                 {m === 'login' ? 'Anmelden' : 'Registrieren'}
@@ -53,12 +77,25 @@ export function AuthPage() {
             <Input
               label="Benutzername"
               tone="light"
-              placeholder="dein_name"
+              placeholder="Dein Name"
               value={username}
               onChange={e => setUsername(e.target.value)}
               autoComplete="username"
-              autoCapitalize="none"
             />
+
+            {mode === 'register' && (
+              <Input
+                label="E-Mail-Adresse"
+                tone="light"
+                type="email"
+                placeholder="name@beispiel.de"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                autoComplete="email"
+                autoCapitalize="none"
+              />
+            )}
+
             <Input
               label="Passwort"
               tone="light"
@@ -68,8 +105,37 @@ export function AuthPage() {
               onChange={e => setPassword(e.target.value)}
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
             />
+
+            {mode === 'register' && (
+              <>
+                <Input
+                  label="Passwort wiederholen"
+                  tone="light"
+                  type="password"
+                  placeholder="••••••••"
+                  value={confirm}
+                  onChange={e => setConfirm(e.target.value)}
+                  autoComplete="new-password"
+                />
+
+                <label className="flex items-start gap-2.5 text-sm text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={accepted}
+                    onChange={e => setAccepted(e.target.checked)}
+                    className="mt-0.5 w-5 h-5 accent-violet-500 flex-shrink-0"
+                  />
+                  <span>
+                    Ich akzeptiere die{' '}
+                    <Link to="/datenschutz" className="text-violet-600 font-semibold underline">Datenschutzerklärung</Link>
+                  </span>
+                </label>
+              </>
+            )}
+
             {error && <p className="text-red-600 text-sm text-center font-medium">{error}</p>}
-            <Button type="submit" variant="success" size="lg" loading={loading} className="w-full mt-1">
+
+            <Button type="submit" variant="success" size="lg" loading={loading} disabled={!canSubmit} className="w-full mt-1">
               {mode === 'login' ? 'Anmelden' : 'Konto erstellen'}
             </Button>
           </form>
