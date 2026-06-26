@@ -21,7 +21,7 @@ function ProfileButton({ onClick }: { onClick: () => void }) {
 
 function HeaderBar({ onBack, onProfile }: { onBack: () => void; onProfile: () => void }) {
   return (
-    <header className="bg-slate-900/95 backdrop-blur border-b border-white/10 px-3 pb-2 safe-top flex items-center justify-between">
+    <header className="bg-indigo-950/85 backdrop-blur border-b border-white/10 px-3 pb-2 safe-top flex items-center justify-between">
       <IconButton onClick={onBack} aria-label="Zurück"><ChevronLeft size={24} strokeWidth={2.5} /></IconButton>
       <ProfileButton onClick={onProfile} />
     </header>
@@ -33,14 +33,14 @@ export function AppLayout() {
   const navigate = useNavigate()
 
   return (
-    <div className="h-full bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 text-white flex flex-col overflow-hidden">
+    <div className="h-full bg-gradient-to-br from-violet-600 via-indigo-700 to-indigo-900 text-white flex flex-col overflow-hidden">
       <HeaderBar onBack={() => navigate(-1)} onProfile={() => navigate('/profile')} />
 
       <main className="flex-1 overflow-y-auto overflow-x-hidden overscroll-none min-h-0">
         <Outlet />
       </main>
 
-      <footer className="bg-slate-900/95 backdrop-blur border-t border-white/10 px-10 pt-2 safe-bottom flex items-center justify-between">
+      <footer className="bg-indigo-950/85 backdrop-blur border-t border-white/10 px-10 pt-2 safe-bottom flex items-center justify-between">
         <IconButton onClick={() => navigate('/worlds')} aria-label="Welten"><Home size={26} strokeWidth={2.5} /></IconButton>
         <IconButton onClick={() => navigate('/leaderboard')} aria-label="Rangliste"><Trophy size={26} strokeWidth={2.5} /></IconButton>
       </footer>
@@ -68,14 +68,14 @@ export function WorldLayout() {
   }
 
   return (
-    <div className="h-full bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 text-white flex flex-col overflow-hidden">
+    <div className="h-full bg-gradient-to-br from-violet-600 via-indigo-700 to-indigo-900 text-white flex flex-col overflow-hidden">
       <HeaderBar onBack={handleBack} onProfile={() => navigate('profile')} />
 
       <main className="flex-1 overflow-y-auto overflow-x-hidden overscroll-none min-h-0">
         <Outlet />
       </main>
 
-      <footer className="bg-slate-900/95 backdrop-blur border-t border-white/10 px-8 pt-2 safe-bottom flex items-center justify-around">
+      <footer className="bg-indigo-950/85 backdrop-blur border-t border-white/10 px-8 pt-2 safe-bottom flex items-center justify-around">
         <IconButton onClick={() => navigate(`/world/${worldId}`)} aria-label="Home"><Home size={26} strokeWidth={2.5} /></IconButton>
         <IconButton onClick={handleChat} aria-label="Chat"><MessageCircle size={26} strokeWidth={2.5} /></IconButton>
         <IconButton onClick={() => navigate('leaderboard')} aria-label="Rangliste"><Trophy size={26} strokeWidth={2.5} /></IconButton>

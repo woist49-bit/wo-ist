@@ -66,67 +66,76 @@ export function WorldHomePage() {
   const activeEvent = liveEvents.find(e => e.status === 'active')
 
   return (
-    <div className="p-4 max-w-lg mx-auto pt-5 pb-8">
-      {/* Bereich 1: Name + Beschreibung als reiner Text */}
-      <div className="flex items-start justify-between gap-3 mb-6">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-extrabold text-white">{world.name}</h1>
-          {world.description && <p className="text-white/60 text-sm mt-1">{world.description}</p>}
-          <button onClick={() => setShowCode(!showCode)} className="text-violet-300 text-xs mt-2 font-semibold">
-            {showCode ? `Code: ${world.join_code}` : 'Einladungscode anzeigen'}
-          </button>
+    <div className="h-full flex flex-col">
+      {/* Fixierter oberer Bereich: Name + Beschreibung + Hero-Banner */}
+      <div className="flex-shrink-0 px-4 pt-4 pb-3">
+        <div className="max-w-lg mx-auto">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="min-w-0">
+              <h1 className="text-2xl font-extrabold text-white">{world.name}</h1>
+              {world.description && <p className="text-white/70 text-sm mt-1">{world.description}</p>}
+              <button onClick={() => setShowCode(!showCode)} className="text-violet-200 text-xs mt-2 font-semibold">
+                {showCode ? `Code: ${world.join_code}` : 'Einladungscode anzeigen'}
+              </button>
+            </div>
+            {isAdmin && (
+              <Button size="sm" variant="secondary" onClick={() => navigate(`/world/${worldId}/admin`)}>Admin</Button>
+            )}
+          </div>
+
+          {activeEvent ? (
+            <button onClick={() => navigate(`/world/${worldId}/event/${activeEvent.id}`)} className="w-full text-left active:translate-y-[2px] transition-transform">
+              <div className="rounded-[1.75rem] p-5 text-white bg-gradient-to-br from-amber-400 via-orange-500 to-rose-500 shadow-[0_6px_0_#9f1239,inset_0_2px_0_#ffffff4d]">
+                <span className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide bg-white/25 rounded-full px-2.5 py-1 mb-2">
+                  <span className="w-2 h-2 rounded-full bg-white animate-pulse" /> Live jetzt
+                </span>
+                <p className="text-2xl font-extrabold leading-tight">{activeEvent.title}</p>
+                {activeEvent.description && <p className="text-white/90 text-sm mt-1 line-clamp-2">{activeEvent.description}</p>}
+                <p className="text-white text-sm font-extrabold mt-3">Jetzt spielen →</p>
+              </div>
+            </button>
+          ) : (
+            <div className="rounded-[1.75rem] p-6 text-center bg-[#efe2c4] border-[3px] border-[#dcc99c] text-slate-500 font-semibold">
+              Kein aktives Live-Event
+            </div>
+          )}
         </div>
-        {isAdmin && (
-          <Button size="sm" variant="secondary" onClick={() => navigate(`/world/${worldId}/admin`)}>Admin</Button>
-        )}
       </div>
 
-      {/* Bereich 2: Live-Event-Banner */}
-      {activeEvent ? (
-        <button onClick={() => navigate(`/world/${worldId}/event/${activeEvent.id}`)} className="w-full text-left mb-7 active:translate-y-[2px] transition-transform">
-          <GameCard className="!bg-violet-500 !border-violet-700 !text-white !shadow-[0_5px_0_#5b21b6]">
-            <p className="text-xs font-bold uppercase tracking-wide text-violet-100 mb-1">🔴 Live jetzt</p>
-            <p className="text-xl font-extrabold">{activeEvent.title}</p>
-            {activeEvent.description && <p className="text-violet-100/90 text-sm mt-1 line-clamp-2">{activeEvent.description}</p>}
-            <p className="text-white text-sm font-bold mt-3">Jetzt spielen →</p>
-          </GameCard>
-        </button>
-      ) : (
-        <GameCard className="!bg-[#efe2c4] !border-[#dcc99c] text-center text-slate-500 font-semibold mb-7 py-6">
-          Kein aktives Live-Event
-        </GameCard>
-      )}
+      {/* Scrollbarer Bereich: Kampagnen */}
+      <div className="flex-1 overflow-y-auto overscroll-none min-h-0 px-4 pb-8">
+        <div className="max-w-lg mx-auto">
+          <h2 className="text-lg font-extrabold text-white mb-3 pt-1">Kampagnen</h2>
+          {campaigns.length === 0 ? (
+            <GameCard className="text-center text-slate-500 py-6">Noch keine Kampagnen</GameCard>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {campaigns.map(c => {
+                const p = progress[c.id] ?? { total: 0, done: 0 }
+                return (
+                  <button key={c.id} onClick={() => navigate(`/world/${worldId}/campaign/${c.id}`)} className="w-full text-left active:translate-y-[2px] transition-transform">
+                    <GameCard>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-extrabold text-slate-800 truncate">{c.title}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            {c.is_legacy ? 'Legacy' : 'Kampagne'} · {p.done}/{p.total} geschafft
+                          </p>
+                        </div>
+                        <DotProgress total={p.total} done={p.done} />
+                      </div>
+                    </GameCard>
+                  </button>
+                )
+              })}
+            </div>
+          )}
 
-      {/* Kampagnen-Liste */}
-      <h2 className="text-lg font-extrabold text-white mb-3">Kampagnen</h2>
-      {campaigns.length === 0 ? (
-        <GameCard className="text-center text-slate-500 py-6">Noch keine Kampagnen</GameCard>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {campaigns.map(c => {
-            const p = progress[c.id] ?? { total: 0, done: 0 }
-            return (
-              <button key={c.id} onClick={() => navigate(`/world/${worldId}/campaign/${c.id}`)} className="w-full text-left active:translate-y-[2px] transition-transform">
-                <GameCard>
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-extrabold text-slate-800 truncate">{c.title}</p>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        {c.is_legacy ? 'Legacy' : 'Kampagne'} · {p.done}/{p.total} geschafft
-                      </p>
-                    </div>
-                    <DotProgress total={p.total} done={p.done} />
-                  </div>
-                </GameCard>
-              </button>
-            )
-          })}
+          <button onClick={leaveWorld} className="block mx-auto mt-8 text-white/40 hover:text-white/60 text-sm transition-colors">
+            Spielwelt verlassen
+          </button>
         </div>
-      )}
-
-      <button onClick={leaveWorld} className="block mx-auto mt-8 text-white/30 hover:text-white/50 text-sm transition-colors">
-        Spielwelt verlassen
-      </button>
+      </div>
     </div>
   )
 }

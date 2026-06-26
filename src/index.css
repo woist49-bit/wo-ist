@@ -20,7 +20,7 @@ html, body {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   touch-action: manipulation;
-  background-color: #0f172a; /* Slate-900 – füllt Safe-Area-Ränder dunkel statt weiß */
+  background-color: #1e1b4b; /* Indigo-950 – füllt Safe-Area-Ränder passend zum Violett-Theme */
 }
 
 body {
