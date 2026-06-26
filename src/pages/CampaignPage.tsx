@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { Card } from '../components/ui/Card'
-import type { Campaign, EventImage, PlayerAttempt } from '../types'
+import { GameCard } from '../components/ui/GameCard'
+import type { Campaign, EventImage } from '../types'
 
 export function CampaignPage() {
   const { worldId, campaignId } = useParams<{ worldId: string; campaignId: string }>()
@@ -11,7 +11,7 @@ export function CampaignPage() {
   const navigate = useNavigate()
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [images, setImages] = useState<EventImage[]>([])
-  const [attempts, setAttempts] = useState<Map<string, PlayerAttempt>>(new Map())
+  const [progress, setProgress] = useState<Map<string, boolean>>(new Map()) // image_id -> abgeschlossen?
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { if (campaignId && user) load() }, [campaignId, user])
@@ -22,7 +22,6 @@ export function CampaignPage() {
 
     let imgs: EventImage[] = []
     if (camp) {
-      // Event-Kampagne: Bilder des Original-Events. Legacy: eigene Bilder über campaign_id.
       const q = camp.original_event_id
         ? supabase.from('event_images').select('*').eq('event_id', camp.original_event_id)
         : supabase.from('event_images').select('*').eq('campaign_id', camp.id)
@@ -32,10 +31,16 @@ export function CampaignPage() {
     setImages(imgs)
 
     if (imgs.length) {
-      const { data: att } = await supabase.from('player_attempts').select('*').eq('user_id', user!.id).in('image_id', imgs.map(i => i.id))
-      const map = new Map<string, PlayerAttempt>()
-      for (const a of att ?? []) map.set(a.image_id, a)
-      setAttempts(map)
+      const ids = imgs.map(i => i.id)
+      // Abgeschlossen = im Kampagnen-Fortschritt gefunden ODER live korrekt gefunden
+      const [attRes, progRes] = await Promise.all([
+        supabase.from('player_attempts').select('image_id, is_correct').eq('user_id', user!.id).in('image_id', ids),
+        supabase.from('campaign_progress').select('image_id, found').eq('campaign_id', campaignId).eq('user_id', user!.id).in('image_id', ids),
+      ])
+      const done = new Map<string, boolean>()
+      for (const a of attRes.data ?? []) if (a.is_correct) done.set(a.image_id, true)
+      for (const p of progRes.data ?? []) if (p.found) done.set(p.image_id, true)
+      setProgress(done)
     }
     setLoading(false)
   }
@@ -43,60 +48,65 @@ export function CampaignPage() {
   if (loading) return <LoadingScreen />
   if (!campaign) return <div className="p-8 text-center text-white/50">Kampagne nicht gefunden.</div>
 
-  const totalPoints = Array.from(attempts.values()).reduce((s, a) => s + a.points, 0)
   const isEventCampaign = !!campaign.original_event_id
+  const doneCount = images.filter(i => progress.get(i.id)).length
 
   return (
-    <div className="p-4 max-w-lg mx-auto pt-6">
-      <button onClick={() => navigate(`/world/${worldId}`)} className="text-white/40 text-sm mb-4 hover:text-white/70">← Zurück</button>
+    <div className="p-4 max-w-lg mx-auto pt-4 pb-8">
       <div className="flex items-center gap-2 mb-1">
-        <h1 className="text-2xl font-bold text-white">{campaign.title}</h1>
-        {campaign.is_legacy && <span className="text-xs text-amber-400 border border-amber-400/40 rounded-full px-2 py-0.5">Legacy</span>}
+        <h1 className="text-2xl font-extrabold text-white">{campaign.title}</h1>
+        {campaign.is_legacy && <span className="text-xs font-bold text-amber-300 border border-amber-300/50 rounded-full px-2 py-0.5">Legacy</span>}
       </div>
-      <p className="text-indigo-400 font-semibold mb-4">Deine Punkte: {totalPoints}</p>
+      <p className="text-white/60 font-semibold mb-4">{doneCount} / {images.length} Bilder geschafft</p>
 
-      <Card className="mb-6 bg-white/5 text-xs text-white/50 py-3">
+      <GameCard className="mb-6 !bg-[#efe2c4] !border-[#dcc99c] text-xs text-slate-600 py-3">
         {isEventCampaign
-          ? 'Wer beim ursprünglichen Live-Event schon dabei war, kann hier nur üben – ohne Punkte. Wer es verpasst hat oder neu ist, bekommt reguläre Punkte (1 Versuch pro Bild).'
-          : 'Spiele die Bilder – beim ersten Durchspielen zählen die Punkte für die Rangliste (1 Versuch pro Bild).'}
-      </Card>
+          ? 'Wer beim Live-Event dabei war, spielt ohne Punkte. Neue Spieler bekommen Punkte beim ersten Fund. Bilder sind beliebig wiederholbar und schalten der Reihe nach frei.'
+          : 'Finde die gesuchte Person auf jedem Bild. Punkte gibt\'s beim ersten Fund, danach beliebig wiederholbar. Bilder schalten der Reihe nach frei.'}
+      </GameCard>
 
       {images.length === 0 ? (
-        <Card className="text-center py-12 text-white/40">
+        <GameCard className="text-center py-12 text-slate-400">
           <p className="text-4xl mb-3">📭</p>
-          <p>Noch keine Bilder in dieser Kampagne.</p>
-        </Card>
+          <p className="font-semibold">Noch keine Bilder in dieser Kampagne.</p>
+        </GameCard>
       ) : (
         <div className="flex flex-col gap-3">
           {images.map((img, idx) => {
-            const att = attempts.get(img.id)
-            const played = !!att
+            const done = !!progress.get(img.id)
+            const unlocked = idx === 0 || !!progress.get(images[idx - 1].id)
             return (
-              <button key={img.id} onClick={() => navigate(`/world/${worldId}/campaign/${campaignId}/image/${img.id}`)} className="w-full text-left">
-                <Card className={`hover:bg-white/10 transition-colors ${played ? 'border-white/5' : 'border-indigo-500/30'}`}>
+              <button
+                key={img.id}
+                disabled={!unlocked}
+                onClick={() => unlocked && navigate(`/world/${worldId}/campaign/${campaignId}/image/${img.id}`)}
+                className={`w-full text-left ${unlocked ? 'active:translate-y-[2px] transition-transform' : 'cursor-not-allowed'}`}
+              >
+                <GameCard className={unlocked ? '' : 'opacity-60'}>
                   <div className="flex items-center gap-4">
-                    <div className="relative w-20 h-14 rounded-lg overflow-hidden bg-slate-800 flex-shrink-0">
-                      <img src={img.image_url} alt="" className="w-full h-full object-cover" />
-                      {!played && <div className="absolute inset-0 flex items-center justify-center bg-black/20"><span className="text-2xl">🔍</span></div>}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-white">Bild {idx + 1}</p>
-                      {played
-                        ? <p className="text-xs text-white/40">{att.is_correct ? 'Gefunden' : 'Daneben'} · Üben möglich</p>
-                        : <p className="text-xs text-indigo-400">Noch nicht gespielt</p>}
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      {played ? (
-                        <div className={att.is_correct ? 'text-green-400' : 'text-red-400'}>
-                          <p className="font-bold">{att.is_correct ? `+${att.points}` : '✗'}</p>
-                          <p className="text-xs opacity-70">{att.time_seconds}s</p>
-                        </div>
+                    <div className="relative w-20 h-14 rounded-xl overflow-hidden bg-slate-300 flex-shrink-0">
+                      {unlocked ? (
+                        <>
+                          <img src={img.image_url} alt="" className="w-full h-full object-cover" />
+                          {done && <div className="absolute top-1 right-1 bg-green-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shadow">✓</div>}
+                        </>
                       ) : (
-                        <span className="text-indigo-400 text-sm font-medium">Spielen →</span>
+                        <div className="w-full h-full flex items-center justify-center text-2xl">🔒</div>
                       )}
                     </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-extrabold text-slate-800">Bild {idx + 1}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {!unlocked ? 'Erst das vorherige Bild finden' : done ? '✓ Geschafft' : 'Noch offen'}
+                      </p>
+                    </div>
+                    <div className="flex-shrink-0 text-sm font-bold">
+                      {!unlocked ? <span className="text-slate-400">🔒</span>
+                        : done ? <span className="text-green-600">Wiederholen →</span>
+                        : <span className="text-violet-600">Spielen →</span>}
+                    </div>
                   </div>
-                </Card>
+                </GameCard>
               </button>
             )
           })}

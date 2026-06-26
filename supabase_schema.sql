@@ -90,6 +90,20 @@ create table campaigns (
 -- Legacy-Kampagnen haben eigene Bilder (Event-Kampagnen nutzen die Bilder des Original-Events)
 alter table event_images add column if not exists campaign_id uuid references campaigns(id) on delete cascade;
 
+-- Kampagnen-Fortschritt: getrennt von player_attempts, damit Live-Versuche unberührt bleiben.
+-- Wiederholbar (found bleibt true), Punkte werden nur beim ersten Fund gesetzt.
+create table campaign_progress (
+  id uuid primary key default gen_random_uuid(),
+  campaign_id uuid references campaigns(id) on delete cascade,
+  image_id uuid references event_images(id) on delete cascade,
+  user_id uuid references profiles(id) on delete cascade,
+  world_id uuid references worlds(id) on delete cascade,
+  found boolean not null default false,
+  points integer not null default 0,
+  created_at timestamptz not null default now(),
+  unique (campaign_id, image_id, user_id)
+);
+
 create table player_achievements (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references profiles(id) on delete cascade,
@@ -111,6 +125,7 @@ alter table event_images enable row level security;
 alter table player_attempts enable row level security;
 alter table campaigns enable row level security;
 alter table player_achievements enable row level security;
+alter table campaign_progress enable row level security;
 
 -- =============================================
 -- SCHRITT 3: Policies (jetzt existieren alle Tabellen)
@@ -169,6 +184,10 @@ create policy "Members can view campaigns" on campaigns for select
 create policy "Admins can manage campaigns" on campaigns for all
   using (exists (select 1 from world_members where world_id = campaigns.world_id and user_id = auth.uid() and role = 'admin'));
 
+-- campaign_progress: jeder verwaltet nur seinen eigenen Fortschritt
+create policy "Users manage own campaign progress" on campaign_progress for all
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
 -- player_achievements
 create policy "Users can view own achievements" on player_achievements for select
   using (auth.uid() = user_id);
@@ -221,10 +240,15 @@ create function world_leaderboard(p_world_id uuid)
 returns table(user_id uuid, username text, total_points bigint, wins bigint, achievement_count bigint, xp bigint)
 language sql security definer as $$
   with points as (
-    select pa.user_id, sum(pa.points)::bigint as pts
-    from player_attempts pa
-    join event_images ei on ei.id = pa.image_id and ei.world_id = p_world_id
-    group by pa.user_id
+    select user_id, sum(pts)::bigint as pts from (
+      select pa.user_id, pa.points as pts
+      from player_attempts pa
+      join event_images ei on ei.id = pa.image_id and ei.world_id = p_world_id
+      union all
+      select cp.user_id, cp.points as pts
+      from campaign_progress cp
+      where cp.world_id = p_world_id
+    ) z group by user_id
   ),
   achievements as (
     select user_id, count(*)::bigint as cnt
@@ -267,9 +291,11 @@ create function global_leaderboard()
 returns table(user_id uuid, username text, total_points bigint, wins bigint, achievement_count bigint, xp bigint)
 language sql security definer as $$
   with points as (
-    select pa.user_id, sum(pa.points)::bigint as pts
-    from player_attempts pa
-    group by pa.user_id
+    select user_id, sum(pts)::bigint as pts from (
+      select pa.user_id, pa.points as pts from player_attempts pa
+      union all
+      select cp.user_id, cp.points as pts from campaign_progress cp
+    ) z group by user_id
   ),
   achievements as (
     select user_id, count(*)::bigint as cnt

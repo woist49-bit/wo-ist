@@ -36,18 +36,22 @@ export function WorldHomePage() {
     const camps = (campaignRes.data ?? []) as Campaign[]
     setCampaigns(camps)
 
-    // Fortschritt pro Kampagne (Dot-Indicator: erfolgreich gefundene Bilder)
+    // Fortschritt pro Kampagne: abgeschlossen = live korrekt gefunden ODER im Kampagnen-Fortschritt gefunden
     const images = (imagesRes.data ?? []) as { id: string; event_id: string | null; campaign_id: string | null }[]
     const ids = images.map(i => i.id)
-    let correct = new Set<string>()
+    const completed = new Set<string>()
     if (ids.length) {
-      const { data: atts } = await supabase.from('player_attempts').select('image_id, is_correct').eq('user_id', user!.id).in('image_id', ids)
-      correct = new Set((atts ?? []).filter(a => a.is_correct).map(a => a.image_id))
+      const [attRes, progRes] = await Promise.all([
+        supabase.from('player_attempts').select('image_id, is_correct').eq('user_id', user!.id).in('image_id', ids),
+        supabase.from('campaign_progress').select('image_id, found').eq('user_id', user!.id).in('image_id', ids),
+      ])
+      for (const a of attRes.data ?? []) if (a.is_correct) completed.add(a.image_id)
+      for (const p of progRes.data ?? []) if (p.found) completed.add(p.image_id)
     }
     const prog: Record<string, Progress> = {}
     for (const c of camps) {
       const imgs = images.filter(i => c.original_event_id ? i.event_id === c.original_event_id : i.campaign_id === c.id)
-      prog[c.id] = { total: imgs.length, done: imgs.filter(i => correct.has(i.id)).length }
+      prog[c.id] = { total: imgs.length, done: imgs.filter(i => completed.has(i.id)).length }
     }
     setProgress(prog)
     setLoading(false)
