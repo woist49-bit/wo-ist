@@ -1,5 +1,7 @@
+import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useParams, useLocation } from 'react-router-dom'
 import { ChevronLeft, UserCircle, Home, MessageCircle, Trophy } from 'lucide-react'
+import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../stores/toast'
 import { signOut } from '../../stores/auth'
@@ -61,7 +63,25 @@ export function WorldLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const { worldId } = useParams<{ worldId: string }>()
+  const { user } = useAuth()
   const { addToast } = useToast()
+  const [whatsappLink, setWhatsappLink] = useState<string | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  useEffect(() => {
+    if (!worldId || !user) return
+    let active = true
+    ;(async () => {
+      const [worldRes, memberRes] = await Promise.all([
+        supabase.from('worlds').select('whatsapp_link').eq('id', worldId).single(),
+        supabase.from('world_members').select('role').eq('world_id', worldId).eq('user_id', user.id).single(),
+      ])
+      if (!active) return
+      setWhatsappLink(worldRes.data?.whatsapp_link ?? null)
+      setIsAdmin(memberRes.data?.role === 'admin')
+    })()
+    return () => { active = false }
+  }, [worldId, user])
 
   const onWorldHome = location.pathname.replace(/\/$/, '') === `/world/${worldId}`
 
@@ -71,8 +91,16 @@ export function WorldLayout() {
   }
 
   function handleChat() {
-    // TODO (Etappe Chat): echten WhatsApp-Link aus den Spielwelt-Einstellungen lesen + Admin-Variante.
-    addToast('Noch kein Gruppen-Chat verfügbar. Frag deinen Admin!', 'info', 4000)
+    if (whatsappLink) {
+      window.open(whatsappLink, '_blank', 'noopener,noreferrer')
+    } else {
+      addToast(
+        isAdmin
+          ? 'Noch kein Gruppen-Chat hinterlegt. Füge einen WhatsApp-Link in den Spielwelt-Einstellungen hinzu.'
+          : 'Noch kein Gruppen-Chat verfügbar. Frag deinen Admin!',
+        'info', 5000,
+      )
+    }
   }
 
   return (

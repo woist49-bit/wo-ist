@@ -5,7 +5,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { Input } from '../../components/ui/Input'
-import type { WorldMember, LiveEvent, Profile, Campaign } from '../../types'
+import type { WorldMember, LiveEvent, Profile, Campaign, World } from '../../types'
 
 export function AdminPage() {
   const { worldId } = useParams<{ worldId: string }>()
@@ -14,7 +14,7 @@ export function AdminPage() {
   const [members, setMembers] = useState<(WorldMember & { profile: Profile })[]>([])
   const [events, setEvents] = useState<LiveEvent[]>([])
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
-  const [tab, setTab] = useState<'events' | 'members' | 'campaigns'>('events')
+  const [tab, setTab] = useState<'events' | 'members' | 'campaigns' | 'settings'>('events')
   const [loading, setLoading] = useState(true)
 
   // Create event form
@@ -26,18 +26,46 @@ export function AdminPage() {
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
 
+  // Spielwelt-Einstellungen
+  const [settingsDesc, setSettingsDesc] = useState('')
+  const [settingsLink, setSettingsLink] = useState('')
+  const [settingsSaving, setSettingsSaving] = useState(false)
+  const [settingsError, setSettingsError] = useState('')
+  const [settingsSaved, setSettingsSaved] = useState(false)
+
   useEffect(() => { load() }, [worldId])
 
   async function load() {
-    const [membRes, evRes, campRes] = await Promise.all([
+    const [membRes, evRes, campRes, worldRes] = await Promise.all([
       supabase.from('world_members').select('*, profile:profiles(*)').eq('world_id', worldId),
       supabase.from('live_events').select('*').eq('world_id', worldId).order('starts_at', { ascending: false }),
       supabase.from('campaigns').select('*').eq('world_id', worldId).order('created_at', { ascending: false }),
+      supabase.from('worlds').select('*').eq('id', worldId).single(),
     ])
     setMembers((membRes.data ?? []) as (WorldMember & { profile: Profile })[])
     setEvents(evRes.data ?? [])
     setCampaigns(campRes.data ?? [])
+    const world = worldRes.data as World | null
+    setSettingsDesc(world?.description ?? '')
+    setSettingsLink(world?.whatsapp_link ?? '')
     setLoading(false)
+  }
+
+  async function saveSettings() {
+    setSettingsError(''); setSettingsSaved(false)
+    const link = settingsLink.trim()
+    if (link && !link.startsWith('https://chat.whatsapp.com/')) {
+      setSettingsError('Bitte gib einen gültigen WhatsApp-Gruppenlink ein.')
+      return
+    }
+    setSettingsSaving(true)
+    const { error: err } = await supabase.from('worlds').update({
+      description: settingsDesc.trim() || null,
+      whatsapp_link: link || null,
+    }).eq('id', worldId)
+    setSettingsSaving(false)
+    if (err) { setSettingsError(err.message); return }
+    setSettingsSaved(true)
   }
 
   async function deleteCampaign(id: string) {
@@ -122,9 +150,9 @@ export function AdminPage() {
       <h1 className="text-2xl font-bold text-white mb-6">Admin-Bereich</h1>
 
       <div className="flex rounded-xl overflow-hidden border border-white/10 mb-6">
-        {(['events', 'members', 'campaigns'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)} className={`flex-1 py-2.5 text-xs font-medium transition-colors capitalize ${tab === t ? 'bg-indigo-600 text-white' : 'text-white/50 hover:text-white'}`}>
-            {t === 'events' ? 'Events' : t === 'members' ? 'Mitglieder' : 'Kampagnen'}
+        {(['events', 'members', 'campaigns', 'settings'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)} className={`flex-1 py-2.5 text-xs font-medium transition-colors ${tab === t ? 'bg-indigo-600 text-white' : 'text-white/50 hover:text-white'}`}>
+            {t === 'events' ? 'Events' : t === 'members' ? 'Spieler' : t === 'campaigns' ? 'Kampagnen' : 'Welt'}
           </button>
         ))}
       </div>
@@ -228,6 +256,37 @@ export function AdminPage() {
               </Card>
             ))
           )}
+        </div>
+      )}
+
+      {tab === 'settings' && (
+        <div className="flex flex-col gap-4">
+          <Card>
+            <h2 className="font-semibold text-white mb-3">Spielwelt-Einstellungen</h2>
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="text-sm font-medium text-white/70 mb-1 block">Beschreibung</label>
+                <textarea
+                  placeholder="Worum geht's in dieser Spielwelt?"
+                  value={settingsDesc}
+                  onChange={e => { setSettingsDesc(e.target.value); setSettingsSaved(false) }}
+                  rows={2}
+                  className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-2.5 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition resize-none"
+                />
+              </div>
+              <Input
+                label="WhatsApp-Gruppenlink"
+                placeholder="https://chat.whatsapp.com/..."
+                value={settingsLink}
+                onChange={e => { setSettingsLink(e.target.value); setSettingsSaved(false) }}
+                autoCapitalize="none"
+              />
+              <p className="text-xs text-white/40 -mt-1">Über den Chat-Button in der Tab-Bar erreichbar. Leer lassen = kein Chat.</p>
+              {settingsError && <p className="text-red-400 text-sm">{settingsError}</p>}
+              {settingsSaved && <p className="text-green-400 text-sm">✓ Gespeichert</p>}
+              <Button loading={settingsSaving} onClick={saveSettings} className="w-full">Speichern</Button>
+            </div>
+          </Card>
         </div>
       )}
     </div>
