@@ -47,5 +47,16 @@ input, textarea, select, [contenteditable="true"] {
 .safe-bottom  { padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem); }
 .safe-area-pb { padding-bottom: calc(env(safe-area-inset-bottom) + 1rem); }
 
-input[type="datetime-local"] { color-scheme: dark; }
 input[type="range"] { accent-color: #6366f1; }
+
+/* Native Datum/Uhrzeit-Felder respektieren width:100% auf WebKit nicht zuverlässig
+   und laufen sonst über den Rand. Eigenstyling aus + auf Containerbreite begrenzen. */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
