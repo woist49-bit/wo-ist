@@ -49,6 +49,12 @@ input, textarea, select, [contenteditable="true"] {
 
 input[type="range"] { accent-color: #6366f1; }
 
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+.animate-slide-in-right { animation: slideInRight 0.25s ease-out; }
+
 /* Native Datum/Uhrzeit-Felder respektieren width:100% auf WebKit nicht zuverlässig
    und laufen sonst über den Rand. Eigenstyling aus + auf Containerbreite begrenzen. */
 input[type="date"],
