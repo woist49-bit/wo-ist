@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { ChevronLeft } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useToast } from '../stores/toast'
 import { calcPoints, isHit, distanceFraction } from '../lib/scoring'
 import { ACHIEVEMENT_MAP } from '../lib/achievements'
 import { Button } from '../components/ui/Button'
+import { GameCard } from '../components/ui/GameCard'
+import { IconButton } from '../components/ui/IconButton'
 import { ImageMarkerViewer, type ViewerMarker } from '../components/marker/ImageMarkerViewer'
 import type { EventImage, PlayerAttempt } from '../types'
 
@@ -30,6 +33,9 @@ export function ImageGamePage() {
   const [practice, setPractice] = useState(false)
   const [practiceRevealed, setPracticeRevealed] = useState(false)
   const [practiceHit, setPracticeHit] = useState<boolean | null>(null)
+
+  // Abbruch-Dialog (nur Live-Event, Zurück vor dem Bestätigen)
+  const [showAbort, setShowAbort] = useState(false)
 
   const startTimeRef = useRef<number>(Date.now())
 
@@ -113,6 +119,29 @@ export function ImageGamePage() {
     setTip(null)
   }
 
+  // Live-Event: Zurück VOR dem Bestätigen -> Abbruch-Dialog. Sonst (Kampagne, oder schon aufgelöst): direkt zurück.
+  function handleBack() {
+    if (!isCampaign && placing) setShowAbort(true)
+    else navigate(-1)
+  }
+
+  // Abbruch bestätigt: Versuch als verbraucht (0 Punkte) speichern und zurück.
+  async function abortConfirm() {
+    if (!image || !user) { navigate(-1); return }
+    setSubmitting(true)
+    const seconds = Math.round((Date.now() - startTimeRef.current) / 1000)
+    await supabase.from('player_attempts').insert({
+      image_id: image.id,
+      user_id: user.id,
+      click_x: tip?.x ?? 0,
+      click_y: tip?.y ?? 0,
+      is_correct: false,
+      points: 0,
+      time_seconds: seconds,
+    })
+    navigate(-1)
+  }
+
   async function checkAchievements({ hit, seconds, dist }: { hit: boolean; seconds: number; dist: number }) {
     if (!user || !worldId) return
     const toUnlock: string[] = []
@@ -173,36 +202,30 @@ export function ImageGamePage() {
         />
       </div>
 
-      {/* Top-Leiste als Overlay */}
-      <div className="absolute top-0 inset-x-0 z-20 flex items-center gap-3 px-4 pb-3 safe-top bg-gradient-to-b from-black/80 via-black/50 to-transparent">
-        <button onClick={() => navigate(-1)} className="text-white/70 text-sm">← Zurück</button>
-        {placing && (
-          <>
-            <span className="text-white/40 text-xs">
-              {practice ? 'Übungsmodus – keine Punkte' : 'Tippe auf das Bild um die gesuchte Person zu markieren'}
-            </span>
-            {!practice && <span className="ml-auto text-white/70 text-sm font-mono font-bold">{String(elapsed).padStart(2, '0')}s</span>}
-          </>
+      {/* Top-Leiste als Overlay: Zurück-Button + Timer-Badge */}
+      <div className="absolute top-0 inset-x-0 z-20 flex items-center gap-3 px-3 pb-3 safe-top bg-gradient-to-b from-black/80 via-black/40 to-transparent">
+        <IconButton variant="grey" onClick={handleBack} aria-label="Zurück"><ChevronLeft size={22} strokeWidth={2.5} /></IconButton>
+        {placing && !practice && (
+          <span className="ml-auto bg-white text-slate-800 text-base font-mono font-extrabold px-3.5 py-1.5 rounded-full shadow-[0_3px_0_rgba(0,0,0,0.25)]">{elapsed}s</span>
+        )}
+        {placing && practice && (
+          <span className="ml-auto bg-violet-500 text-white text-xs font-bold px-3 py-1.5 rounded-full">Übungsmodus</span>
         )}
         {revealed && attempt && (
-          <div className={`ml-auto text-sm font-bold ${attempt.is_correct ? 'text-green-400' : 'text-red-400'}`}>
-            {attempt.is_correct ? `✓ ${attempt.points} Punkte (${attempt.time_seconds}s)` : '✗ Daneben!'}
-          </div>
+          <span className={`ml-auto text-sm font-extrabold px-3.5 py-1.5 rounded-full text-white ${attempt.is_correct ? 'bg-green-500' : 'bg-red-500'}`}>
+            {attempt.is_correct ? `✓ ${attempt.points} Pkt` : '✗ Daneben'}
+          </span>
         )}
-        {practiceRevealed && <div className="ml-auto text-sm font-bold text-white/60">Übungsmodus</div>}
+        {practiceRevealed && (
+          <span className="ml-auto bg-violet-500 text-white text-xs font-bold px-3 py-1.5 rounded-full">Übungsmodus</span>
+        )}
       </div>
 
-      {placing && tip && (
-        <div className="absolute bottom-0 inset-x-0 bg-slate-900/95 backdrop-blur p-4 z-30 border-t border-white/10 safe-area-pb">
-          <p className="text-center text-white/70 text-sm mb-3">
-            {practice ? 'Übungsmodus – wird nicht gespeichert.' : 'Bist du sicher? Du hast nur einen Versuch!'}
-          </p>
-          <div className="flex gap-3">
-            <Button variant="secondary" className="flex-1" onClick={() => setTip(null)}>
-              Neu setzen
-            </Button>
-            <Button className="flex-1" loading={submitting} onClick={confirmClick}>
-              {practice ? 'Prüfen' : '✓ Bestätigen'}
+      {placing && (
+        <div className="absolute bottom-0 inset-x-0 z-30 px-4 pt-10 safe-area-pb bg-gradient-to-t from-black/85 via-black/40 to-transparent">
+          <div className="max-w-md mx-auto">
+            <Button variant="success" size="lg" className="w-full" disabled={!tip || submitting} loading={submitting} onClick={confirmClick}>
+              {!tip ? 'Tippe zuerst ins Bild' : (practice ? 'Prüfen' : '✓ Bestätigen')}
             </Button>
           </div>
         </div>
@@ -240,6 +263,20 @@ export function ImageGamePage() {
             <Button variant="secondary" className="flex-1" onClick={resetPractice}>Nochmal üben</Button>
             <Button className="flex-1" onClick={() => navigate(-1)}>Zurück</Button>
           </div>
+        </div>
+      )}
+
+      {/* Abbruch-Dialog (Live-Event, Zurück vor dem Bestätigen) */}
+      {showAbort && (
+        <div className="absolute inset-0 z-40 bg-black/70 flex items-center justify-center p-6">
+          <GameCard className="w-full max-w-sm">
+            <p className="font-extrabold text-slate-800 text-lg mb-1">Wirklich abbrechen?</p>
+            <p className="text-slate-600 text-sm mb-4">Dein Versuch gilt als verbraucht und du erhältst 0 Punkte.</p>
+            <div className="flex gap-3">
+              <Button variant="secondary" className="flex-1" onClick={() => setShowAbort(false)}>Abbrechen</Button>
+              <Button variant="danger" className="flex-1" loading={submitting} onClick={abortConfirm}>Bestätigen</Button>
+            </div>
+          </GameCard>
         </div>
       )}
     </div>
