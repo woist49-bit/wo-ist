@@ -67,14 +67,14 @@ export function WorldHomePage() {
 
   return (
     <div className="h-full flex flex-col">
-      {/* Fixierter oberer Bereich: Name + Beschreibung + Hero-Banner */}
-      <div className="flex-shrink-0 px-4 pt-4 pb-3">
-        <div className="max-w-lg mx-auto">
+      {/* Fixierter, farblich abgesetzter Hero-Bereich: Titel + Beschreibung + Live-Event-Kachel */}
+      <div className="flex-shrink-0 bg-gradient-to-br from-sky-600 to-blue-800 rounded-b-[2rem] shadow-[0_8px_24px_rgba(0,0,0,0.28)] pt-2 pb-5">
+        <div className="max-w-lg mx-auto px-4">
           <div className="flex items-start justify-between gap-3 mb-4">
             <div className="min-w-0">
               <h1 className="text-2xl font-extrabold text-white">{world.name}</h1>
-              {world.description && <p className="text-white/70 text-sm mt-1">{world.description}</p>}
-              <button onClick={() => setShowCode(!showCode)} className="text-violet-200 text-xs mt-2 font-semibold">
+              {world.description && <p className="text-sky-100/90 text-sm mt-1">{world.description}</p>}
+              <button onClick={() => setShowCode(!showCode)} className="text-sky-200 text-xs mt-2 font-semibold">
                 {showCode ? `Code: ${world.join_code}` : 'Einladungscode anzeigen'}
               </button>
             </div>
@@ -85,7 +85,7 @@ export function WorldHomePage() {
 
           {activeEvent ? (
             <button onClick={() => navigate(`/world/${worldId}/event/${activeEvent.id}`)} className="w-full text-left active:translate-y-[2px] transition-transform">
-              <div className="rounded-[1.75rem] p-5 text-white bg-gradient-to-br from-amber-400 via-orange-500 to-rose-500 shadow-[0_6px_0_#9f1239,inset_0_2px_0_#ffffff4d]">
+              <div className="rounded-[1.5rem] p-5 text-white bg-gradient-to-br from-amber-400 via-orange-500 to-rose-500 shadow-[0_6px_0_#9f1239,inset_0_2px_0_#ffffff4d]">
                 <span className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide bg-white/25 rounded-full px-2.5 py-1 mb-2">
                   <span className="w-2 h-2 rounded-full bg-white animate-pulse" /> Live jetzt
                 </span>
@@ -95,7 +95,7 @@ export function WorldHomePage() {
               </div>
             </button>
           ) : (
-            <div className="rounded-[1.75rem] p-6 text-center bg-[#efe2c4] border-[3px] border-[#dcc99c] text-slate-500 font-semibold">
+            <div className="rounded-[1.5rem] p-5 text-center bg-white/15 border border-white/25 text-white/80 font-semibold">
               Kein aktives Live-Event
             </div>
           )}
@@ -103,9 +103,9 @@ export function WorldHomePage() {
       </div>
 
       {/* Scrollbarer Bereich: Kampagnen */}
-      <div className="flex-1 overflow-y-auto overscroll-none min-h-0 px-4 pb-8">
+      <div className="flex-1 overflow-y-auto overscroll-none min-h-0 px-4 pb-8 pt-5">
         <div className="max-w-lg mx-auto">
-          <h2 className="text-lg font-extrabold text-white mb-3 pt-1">Kampagnen</h2>
+          <h2 className="text-lg font-extrabold text-white mb-3">Kampagnen</h2>
           {campaigns.length === 0 ? (
             <GameCard className="text-center text-slate-500 py-6">Noch keine Kampagnen</GameCard>
           ) : (
