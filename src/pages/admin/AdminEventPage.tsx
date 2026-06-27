@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { Button } from '../../components/ui/Button'
 import { GameCard } from '../../components/ui/GameCard'
 import { Input } from '../../components/ui/Input'
+import { DescriptionInput } from '../../components/ui/DescriptionInput'
 import { BoundingBoxEditor } from '../../components/marker/BoundingBoxEditor'
 import type { LiveEvent, EventImage } from '../../types'
 
@@ -18,10 +19,12 @@ export function AdminEventPage() {
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [unlocksDate, setUnlocksDate] = useState('')
+  const [uploadDesc, setUploadDesc] = useState('')
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [editDesc, setEditDesc] = useState('')
 
   useEffect(() => { load() }, [eventId])
 
@@ -54,6 +57,7 @@ export function AdminEventPage() {
       event_id: eventId,
       world_id: worldId,
       image_url: urlData.publicUrl,
+      description: uploadDesc.trim() || null,
       unlocks_at: unlocksAt,
       sort_order: images.length + 1,
       target_x: 0.5,
@@ -69,8 +73,10 @@ export function AdminEventPage() {
       setImages(prev => [...prev, img])
       setSelectedFile(null)
       setUnlocksDate('')
+      setUploadDesc('')
       if (fileRef.current) fileRef.current.value = ''
       setEditingId(img.id)
+      setEditDesc(img.description ?? '')
     }
   }
 
@@ -127,6 +133,7 @@ export function AdminEventPage() {
           {selectedFile && (
             <>
               <Input tone="light" label="Freischaltungsdatum" type="date" value={unlocksDate} onChange={e => setUnlocksDate(e.target.value)} autoFocus />
+              <DescriptionInput value={uploadDesc} onChange={setUploadDesc} />
               {uploadError && <p className="text-red-600 text-sm font-medium">{uploadError}</p>}
               <Button variant="success" loading={uploading} onClick={uploadImage} disabled={!unlocksDate} className="w-full">Hochladen</Button>
             </>
@@ -152,9 +159,10 @@ export function AdminEventPage() {
                     {new Date(img.unlocks_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                   </p>
                   <p className="text-xs text-slate-400 mt-0.5">{img.target_x !== 0.5 || img.target_y !== 0.5 ? '✓ Markiert' : '⚠ Noch nicht markiert'}</p>
+                  {img.description && <p className="text-xs text-slate-600 mt-1 italic line-clamp-2">{img.description}</p>}
                 </div>
                 <div className="flex gap-2 flex-shrink-0">
-                  <Button size="sm" variant="secondary" onClick={() => setEditingId(editingId === img.id ? null : img.id)}>
+                  <Button size="sm" variant="secondary" onClick={() => { const open = editingId === img.id; setEditingId(open ? null : img.id); if (!open) setEditDesc(img.description ?? '') }}>
                     {editingId === img.id ? 'Fertig' : '✎'}
                   </Button>
                   <Button size="sm" variant="danger" onClick={() => deleteImage(img.id)}>✕</Button>
@@ -162,11 +170,20 @@ export function AdminEventPage() {
               </div>
 
               {editingId === img.id && (
-                <BoundingBoxEditor image={img} onSave={async (tx, ty, tr) => {
-                  await supabase.from('event_images').update({ target_x: tx, target_y: ty, target_radius: tr }).eq('id', img.id)
-                  setImages(prev => prev.map(i => i.id === img.id ? { ...i, target_x: tx, target_y: ty, target_radius: tr } : i))
-                  setEditingId(null)
-                }} />
+                <div className="mt-4 flex flex-col gap-3">
+                  <DescriptionInput value={editDesc} onChange={setEditDesc} />
+                  <Button size="sm" variant="secondary" onClick={async () => {
+                    const d = editDesc.trim() || null
+                    await supabase.from('event_images').update({ description: d }).eq('id', img.id)
+                    setImages(prev => prev.map(i => i.id === img.id ? { ...i, description: d } : i))
+                  }}>Beschreibung speichern</Button>
+                  <BoundingBoxEditor image={img} onSave={async (tx, ty, tr) => {
+                    const d = editDesc.trim() || null
+                    await supabase.from('event_images').update({ target_x: tx, target_y: ty, target_radius: tr, description: d }).eq('id', img.id)
+                    setImages(prev => prev.map(i => i.id === img.id ? { ...i, target_x: tx, target_y: ty, target_radius: tr, description: d } : i))
+                    setEditingId(null)
+                  }} />
+                </div>
               )}
             </GameCard>
           ))}

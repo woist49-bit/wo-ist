@@ -101,6 +101,7 @@ export function CampaignPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-extrabold text-slate-800">Bild {idx + 1}</p>
+                      {tappable && img.description && <p className="text-xs text-slate-600 mt-0.5 line-clamp-2">{img.description}</p>}
                       <p className="text-xs text-slate-500 mt-0.5">
                         {completed ? (pts > 0 ? `✓ Geschafft · ${pts} Punkte` : '✓ Geschafft')
                           : current ? 'Jetzt spielen' : 'Gesperrt'}

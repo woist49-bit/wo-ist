@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { Button } from '../../components/ui/Button'
 import { GameCard } from '../../components/ui/GameCard'
+import { DescriptionInput } from '../../components/ui/DescriptionInput'
 import { BoundingBoxEditor } from '../../components/marker/BoundingBoxEditor'
 import type { Campaign, EventImage } from '../../types'
 
@@ -16,9 +17,11 @@ export function AdminCampaignPage() {
   const [loading, setLoading] = useState(true)
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [uploadDesc, setUploadDesc] = useState('')
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [editDesc, setEditDesc] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { load() }, [campaignId])
@@ -49,6 +52,7 @@ export function AdminCampaignPage() {
       campaign_id: campaignId,
       world_id: worldId,
       image_url: urlData.publicUrl,
+      description: uploadDesc.trim() || null,
       unlocks_at: new Date().toISOString(),
       sort_order: images.length + 1,
       target_x: 0.5,
@@ -62,8 +66,10 @@ export function AdminCampaignPage() {
     if (img) {
       setImages(prev => [...prev, img])
       setSelectedFile(null)
+      setUploadDesc('')
       if (fileRef.current) fileRef.current.value = ''
       setEditingId(img.id)
+      setEditDesc(img.description ?? '')
     }
   }
 
@@ -99,6 +105,7 @@ export function AdminCampaignPage() {
               className="block w-full text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-violet-500 file:text-white file:font-bold hover:file:bg-violet-600 cursor-pointer"
             />
             {selectedFile && <p className="text-xs text-violet-600 font-medium mt-2">{selectedFile.name}</p>}
+            {selectedFile && <div className="mt-3"><DescriptionInput value={uploadDesc} onChange={setUploadDesc} /></div>}
             {uploadError && <p className="text-red-600 text-sm font-medium mt-2">{uploadError}</p>}
             {selectedFile && <Button variant="success" loading={uploading} onClick={uploadImage} className="w-full mt-3">Hochladen</Button>}
           </GameCard>
@@ -118,20 +125,30 @@ export function AdminCampaignPage() {
                     <div className="flex-1 min-w-0">
                       <p className="font-extrabold text-slate-800">Bild {idx + 1}</p>
                       <p className="text-xs text-slate-500 mt-1">{img.target_x !== 0.5 || img.target_y !== 0.5 ? '✓ Markiert' : '⚠ Noch nicht markiert'}</p>
+                      {img.description && <p className="text-xs text-slate-600 mt-1 italic line-clamp-2">{img.description}</p>}
                     </div>
                     <div className="flex gap-2 flex-shrink-0">
-                      <Button size="sm" variant="secondary" onClick={() => setEditingId(editingId === img.id ? null : img.id)}>
+                      <Button size="sm" variant="secondary" onClick={() => { const open = editingId === img.id; setEditingId(open ? null : img.id); if (!open) setEditDesc(img.description ?? '') }}>
                         {editingId === img.id ? 'Fertig' : '✎'}
                       </Button>
                       <Button size="sm" variant="danger" onClick={() => deleteImage(img.id)}>✕</Button>
                     </div>
                   </div>
                   {editingId === img.id && (
-                    <BoundingBoxEditor image={img} onSave={async (tx, ty, tr) => {
-                      await supabase.from('event_images').update({ target_x: tx, target_y: ty, target_radius: tr }).eq('id', img.id)
-                      setImages(prev => prev.map(i => i.id === img.id ? { ...i, target_x: tx, target_y: ty, target_radius: tr } : i))
-                      setEditingId(null)
-                    }} />
+                    <div className="mt-4 flex flex-col gap-3">
+                      <DescriptionInput value={editDesc} onChange={setEditDesc} />
+                      <Button size="sm" variant="secondary" onClick={async () => {
+                        const d = editDesc.trim() || null
+                        await supabase.from('event_images').update({ description: d }).eq('id', img.id)
+                        setImages(prev => prev.map(i => i.id === img.id ? { ...i, description: d } : i))
+                      }}>Beschreibung speichern</Button>
+                      <BoundingBoxEditor image={img} onSave={async (tx, ty, tr) => {
+                        const d = editDesc.trim() || null
+                        await supabase.from('event_images').update({ target_x: tx, target_y: ty, target_radius: tr, description: d }).eq('id', img.id)
+                        setImages(prev => prev.map(i => i.id === img.id ? { ...i, target_x: tx, target_y: ty, target_radius: tr, description: d } : i))
+                        setEditingId(null)
+                      }} />
+                    </div>
                   )}
                 </GameCard>
               ))}

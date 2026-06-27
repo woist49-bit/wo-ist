@@ -78,6 +78,7 @@ create table event_images (
   event_id uuid references live_events(id) on delete cascade,
   world_id uuid references worlds(id) on delete cascade,
   image_url text not null,
+  description text,
   unlocks_at timestamptz not null,
   sort_order integer not null default 0,
   target_x float8 not null default 0.5,
@@ -111,6 +112,9 @@ create table campaigns (
 
 -- Legacy-Kampagnen haben eigene Bilder (Event-Kampagnen nutzen die Bilder des Original-Events)
 alter table event_images add column if not exists campaign_id uuid references campaigns(id) on delete cascade;
+
+-- Optionale Bildbeschreibung (max. 300 Zeichen, im Frontend erzwungen)
+alter table event_images add column if not exists description text;
 
 -- Kampagnen-Fortschritt: getrennt von player_attempts, damit Live-Versuche unberührt bleiben.
 -- Wiederholbar (found bleibt true), Punkte werden nur beim ersten Fund gesetzt.

@@ -70,7 +70,8 @@ export function EventPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-white">Bild {idx + 1}</p>
-                      <p className="text-xs text-white/40">{formatDate(img.unlocks_at)}</p>
+                      {img.description && <p className="text-xs text-white/60 mt-0.5 line-clamp-2">{img.description}</p>}
+                      <p className="text-xs text-white/40 mt-0.5">{formatDate(img.unlocks_at)}</p>
                     </div>
                     <div className="text-right flex-shrink-0">
                       {played ? (

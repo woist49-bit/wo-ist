@@ -44,6 +44,7 @@ export interface EventImage {
   campaign_id: string | null
   world_id: string
   image_url: string
+  description: string | null
   unlocks_at: string
   sort_order: number
   target_x: number
