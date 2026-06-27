@@ -386,6 +386,14 @@ language sql security definer as $$
   limit 100;
 $$;
 
+-- Aggregierte Spielstatistik eines Nutzers (für fremde Profilseiten – nur Zählwerte, keine sensiblen Daten)
+create or replace function user_play_stats(p_user_id uuid)
+returns table(total bigint, finds bigint)
+language sql security definer as $$
+  select count(*)::bigint, count(*) filter (where is_correct)::bigint
+  from player_attempts where user_id = p_user_id;
+$$;
+
 -- Rangliste pro Live-Event (nur Punkte aus den Bildern dieses Events)
 create or replace function event_leaderboard(p_event_id uuid)
 returns table(user_id uuid, username text, total_points bigint, finds bigint, xp bigint)

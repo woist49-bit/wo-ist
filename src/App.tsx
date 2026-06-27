@@ -41,12 +41,14 @@ export function App() {
           <Route path="/worlds" element={user ? <WorldsPage /> : <Navigate to="/" replace />} />
           <Route path="/leaderboard" element={user ? <LeaderboardPage /> : <Navigate to="/" replace />} />
           <Route path="/profile" element={user ? <ProfilePage /> : <Navigate to="/" replace />} />
+          <Route path="/profile/:userId" element={user ? <ProfilePage /> : <Navigate to="/" replace />} />
         </Route>
         <Route path="/world/:worldId" element={<WorldLayout />}>
           <Route index element={user ? <WorldHomePage /> : <Navigate to="/" replace />} />
           <Route path="leaderboard" element={user ? <LeaderboardPage /> : <Navigate to="/" replace />} />
           <Route path="achievements" element={user ? <AchievementsPage /> : <Navigate to="/" replace />} />
           <Route path="profile" element={user ? <ProfilePage /> : <Navigate to="/" replace />} />
+          <Route path="profile/:userId" element={user ? <ProfilePage /> : <Navigate to="/" replace />} />
           <Route path="event/:eventId" element={user ? <EventPage /> : <Navigate to="/" replace />} />
           <Route path="event/:eventId/image/:imageId" element={user ? <ImageGamePage /> : <Navigate to="/" replace />} />
           <Route path="campaign/:campaignId" element={user ? <CampaignPage /> : <Navigate to="/" replace />} />

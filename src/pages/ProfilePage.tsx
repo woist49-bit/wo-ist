@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
@@ -9,10 +9,16 @@ import { ACHIEVEMENTS } from '../lib/achievements'
 import { Button } from '../components/ui/Button'
 import { GameCard } from '../components/ui/GameCard'
 import { IconButton } from '../components/ui/IconButton'
+import type { Profile } from '../types'
 
 export function ProfilePage() {
-  const { user, profile } = useAuth()
+  const { userId } = useParams<{ userId: string }>()
+  const { user } = useAuth()
   const navigate = useNavigate()
+  const targetId = userId ?? user?.id
+  const isOwn = !!targetId && targetId === user?.id
+
+  const [profile, setProfile] = useState<Profile | null>(null)
   const [tab, setTab] = useState<'achievements' | 'stats'>('achievements')
   const [totalPoints, setTotalPoints] = useState(0)
   const [wins, setWins] = useState(0)
@@ -20,25 +26,27 @@ export function ProfilePage() {
   const [attempts, setAttempts] = useState({ total: 0, finds: 0 })
 
   useEffect(() => {
-    if (!user) return
+    if (!targetId) return
     let active = true
     ;(async () => {
-      const [lbRes, achRes, attRes] = await Promise.all([
+      const [profRes, lbRes, achRes, statRes] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', targetId).single(),
         supabase.rpc('global_leaderboard'),
-        supabase.from('player_achievements').select('achievement_key').eq('user_id', user.id),
-        supabase.from('player_attempts').select('is_correct').eq('user_id', user.id),
+        supabase.from('player_achievements').select('achievement_key').eq('user_id', targetId),
+        supabase.rpc('user_play_stats', { p_user_id: targetId }),
       ])
       if (!active) return
+      setProfile(profRes.data)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const myRow = (lbRes.data ?? []).find((r: any) => r.user_id === user.id)
-      setTotalPoints(Number(myRow?.total_points ?? 0))
-      setWins(Number(myRow?.wins ?? 0))
+      const row = (lbRes.data ?? []).find((r: any) => r.user_id === targetId)
+      setTotalPoints(Number(row?.total_points ?? 0))
+      setWins(Number(row?.wins ?? 0))
       setUnlocked(new Set((achRes.data ?? []).map(a => a.achievement_key)))
-      const atts = attRes.data ?? []
-      setAttempts({ total: atts.length, finds: atts.filter(a => a.is_correct).length })
+      const s = (statRes.data ?? [])[0]
+      setAttempts({ total: Number(s?.total ?? 0), finds: Number(s?.finds ?? 0) })
     })()
     return () => { active = false }
-  }, [user])
+  }, [targetId])
 
   if (!profile) return null
 
@@ -56,7 +64,6 @@ export function ProfilePage() {
             <IconButton variant="grey" onClick={() => navigate(-1)} aria-label="Zurück"><ChevronLeft size={24} strokeWidth={2.5} /></IconButton>
           </div>
 
-          {/* Profilbild + Name nebeneinander */}
           <div className="flex items-center gap-4 mb-4 mt-1">
             <div className="w-16 h-16 rounded-2xl bg-violet-500 text-white text-2xl font-extrabold flex items-center justify-center shadow-[0_3px_0_#5b21b6,inset_0_2px_0_#ffffff4d] flex-shrink-0">
               {initial}
@@ -67,7 +74,6 @@ export function ProfilePage() {
             </div>
           </div>
 
-          {/* Level-Leiste */}
           <div className="mb-4">
             <div className="flex justify-between text-xs text-sky-100/90 font-semibold mb-1">
               <span>XP bis Level {level + 1}</span>
@@ -78,7 +84,6 @@ export function ProfilePage() {
             </div>
           </div>
 
-          {/* 3 Kacheln */}
           <div className="grid grid-cols-3 gap-2 mb-4">
             <GameCard className="text-center !p-3">
               <p className="text-2xl font-extrabold text-slate-800">{totalPoints.toLocaleString()}</p>
@@ -94,7 +99,6 @@ export function ProfilePage() {
             </GameCard>
           </div>
 
-          {/* Tab-Auswahl */}
           <div className="flex rounded-2xl bg-[#efe2c4] p-1">
             {(['achievements', 'stats'] as const).map(t => (
               <button key={t} onClick={() => setTab(t)} className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${tab === t ? 'bg-violet-500 text-white shadow-[0_2px_0_#5b21b6]' : 'text-slate-500'}`}>
@@ -105,7 +109,6 @@ export function ProfilePage() {
         </div>
       </div>
 
-      {/* Scrollbar: nur die Liste */}
       <div className="flex-1 overflow-y-auto overscroll-none min-h-0 px-4 pb-8 pt-4">
         <div className="max-w-lg mx-auto">
           {tab === 'achievements' && (
@@ -142,13 +145,16 @@ export function ProfilePage() {
             </div>
           )}
 
-          <Button variant="danger" className="w-full mt-6" onClick={async () => { await signOut(); navigate('/') }}>
-            Abmelden
-          </Button>
-
-          <button onClick={() => navigate('/datenschutz')} className="block mx-auto mt-5 text-white/30 hover:text-white/50 text-xs transition-colors">
-            Datenschutzerklärung
-          </button>
+          {isOwn && (
+            <>
+              <Button variant="danger" className="w-full mt-6" onClick={async () => { await signOut(); navigate('/') }}>
+                Abmelden
+              </Button>
+              <button onClick={() => navigate('/datenschutz')} className="block mx-auto mt-5 text-white/30 hover:text-white/50 text-xs transition-colors">
+                Datenschutzerklärung
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
