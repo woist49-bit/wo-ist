@@ -16,42 +16,75 @@ export function DatenschutzPage() {
       <div className="flex-1 overflow-y-auto overscroll-none min-h-0 px-4 pb-8">
         <div className="max-w-lg mx-auto">
           <GameCard className="text-slate-700 text-sm leading-relaxed">
-            <p className="text-xs text-slate-500 italic mb-4">
-              Hinweis: Dies ist eine Vorlage. Bitte vor dem produktiven Einsatz rechtlich prüfen lassen.
+            <p className="mb-4">
+              Diese App ist eine private, geschlossene Anwendung, die ausschließlich für eine private
+              Freundesgruppe betrieben wird. Es werden keine kommerziellen Zwecke verfolgt. Der Schutz deiner
+              Daten ist uns wichtig – nachfolgend erklären wir, welche Daten wir verarbeiten und warum.
             </p>
 
             <Section title="1. Verantwortlicher">
-              Verantwortlich für die Datenverarbeitung in dieser App ist der Betreiber der Spielwelt.
-              Kontakt erfolgt über die jeweilige Spielgruppe.
+              Verantwortlich für die Datenverarbeitung im Sinne der DSGVO ist:<br />
+              <b>[Name des Betreibers]</b><br />
+              [Anschrift des Betreibers]<br />
+              E-Mail: <b>[Kontakt-E-Mail des Betreibers]</b>
             </Section>
 
-            <Section title="2. Welche Daten wir verarbeiten">
-              Bei der Registrierung speichern wir deinen <b>Benutzernamen</b>, deine <b>E-Mail-Adresse</b> und
-              dein (verschlüsselt gespeichertes) <b>Passwort</b>. Während des Spielens entstehen Daten zu
-              deinen Versuchen, Punkten, Erfolgen und deiner Mitgliedschaft in Spielwelten.
+            <Section title="2. Zweck & Rahmen">
+              Die App dient ausschließlich dem Betrieb eines privaten Such-Spiels innerhalb einer geschlossenen
+              Freundesgruppe (Anmeldung, Spielfortschritt, Ranglisten, Erfolge). Es findet <b>kein</b> Verkauf,
+              <b> keine</b> Werbung und <b>keine</b> kommerzielle Nutzung statt.
             </Section>
 
-            <Section title="3. Zweck der Verarbeitung">
-              Die Daten dienen ausschließlich dem Betrieb des Spiels: Anmeldung, Spielfortschritt, Ranglisten
-              und Erfolge. Die <b>E-Mail-Adresse</b> wird nur zur Registrierung und zur Kontowiederherstellung
-              genutzt – sie ist <b>kein Login-Kriterium</b> und wird nicht für Werbung verwendet.
+            <Section title="3. Welche Daten wir verarbeiten">
+              Bei der Registrierung: dein <b>Benutzername</b>, deine <b>E-Mail-Adresse</b> und dein Passwort
+              (nur verschlüsselt/gehasht gespeichert, niemals im Klartext). Während des Spielens: deine
+              Spielversuche, Punkte, Erfolge und deine Mitgliedschaft in Spielwelten. Eine IP- oder
+              Standort-Erfassung zu Analysezwecken findet nicht statt.
             </Section>
 
-            <Section title="4. Weitergabe">
-              Innerhalb einer Spielwelt sind dein Benutzername und deine Spielstatistiken für andere Mitglieder
-              sichtbar (z. B. in Ranglisten). Deine E-Mail-Adresse ist für andere Spieler <b>nicht</b> sichtbar.
-              Eine Weitergabe an Dritte zu Werbezwecken findet nicht statt.
+            <Section title="4. E-Mail-Adresse">
+              Deine E-Mail-Adresse wird <b>ausschließlich</b> zur Registrierung und zur möglichen
+              Kontowiederherstellung gespeichert. Sie ist <b>kein</b> Login-Kriterium, für andere Spieler
+              <b> nicht</b> sichtbar und wird nicht für Werbung oder Newsletter verwendet.
             </Section>
 
-            <Section title="5. Speicherung & Hosting">
-              Die Daten werden bei unserem Infrastruktur-Dienstleister (Supabase) gespeichert. Die Auslieferung
-              der App erfolgt über Vercel.
+            <Section title="5. Rechtsgrundlage">
+              Die Verarbeitung erfolgt auf Grundlage deiner Einwilligung (Art. 6 Abs. 1 lit. a DSGVO), die du
+              bei der Registrierung erteilst, sowie zur Erfüllung der Nutzung des Spiels (Art. 6 Abs. 1 lit. b
+              DSGVO). Die Einwilligung kannst du jederzeit mit Wirkung für die Zukunft widerrufen.
             </Section>
 
-            <Section title="6. Deine Rechte">
-              Du hast das Recht auf Auskunft, Berichtigung und Löschung deiner Daten. Du kannst dein Konto und
-              die zugehörigen Daten jederzeit löschen lassen. Wende dich dazu an den Betreiber deiner Spielwelt.
+            <Section title="6. Kein Tracking">
+              Es werden <b>keine</b> Tracking-Cookies, kein Analyse-Werkzeug (z. B. Google Analytics) und keine
+              Werbe-Netzwerke eingesetzt. Es findet kein Profiling und keine Weitergabe deiner Daten zu
+              Werbezwecken statt.
             </Section>
+
+            <Section title="7. Weitergabe & Hosting">
+              Eine Weitergabe an Dritte zu kommerziellen Zwecken findet <b>nicht</b> statt. Zur technischen
+              Bereitstellung werden Auftragsverarbeiter eingesetzt: <b>Supabase</b> (Datenbank, Authentifizierung,
+              Speicher) und <b>Vercel</b> (Auslieferung der App). Diese verarbeiten Daten ausschließlich nach
+              unserer Weisung. Innerhalb einer Spielwelt sind dein Benutzername und deine Spielstatistiken für
+              die anderen Mitglieder dieser Gruppe sichtbar (z. B. in Ranglisten).
+            </Section>
+
+            <Section title="8. Speicherdauer">
+              Deine Daten werden gespeichert, solange dein Konto besteht. Bei Löschung deines Kontos werden die
+              zugehörigen Daten entfernt.
+            </Section>
+
+            <Section title="9. Deine Rechte">
+              Du hast das Recht auf Auskunft, Berichtigung, Löschung und Einschränkung der Verarbeitung sowie
+              auf Datenübertragbarkeit und Widerruf deiner Einwilligung. Zur Ausübung wende dich an den oben
+              genannten Verantwortlichen unter <b>[Kontakt-E-Mail des Betreibers]</b>. Außerdem steht dir ein
+              Beschwerderecht bei einer Datenschutz-Aufsichtsbehörde zu.
+            </Section>
+
+            <Section title="10. Kontakt">
+              Bei Fragen zum Datenschutz erreichst du uns unter <b>[Kontakt-E-Mail des Betreibers]</b>.
+            </Section>
+
+            <p className="text-xs text-slate-400 mt-4">Stand: [Datum einsetzen]</p>
           </GameCard>
         </div>
       </div>

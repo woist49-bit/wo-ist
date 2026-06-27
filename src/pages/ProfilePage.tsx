@@ -145,6 +145,10 @@ export function ProfilePage() {
           <Button variant="danger" className="w-full mt-6" onClick={async () => { await signOut(); navigate('/') }}>
             Abmelden
           </Button>
+
+          <button onClick={() => navigate('/datenschutz')} className="block mx-auto mt-5 text-white/30 hover:text-white/50 text-xs transition-colors">
+            Datenschutzerklärung
+          </button>
         </div>
       </div>
     </div>
