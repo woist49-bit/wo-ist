@@ -24,9 +24,9 @@ export function DatenschutzPage() {
 
             <Section title="1. Verantwortlicher">
               Verantwortlich für die Datenverarbeitung im Sinne der DSGVO ist:<br />
-              <b>[Name des Betreibers]</b><br />
-              [Anschrift des Betreibers]<br />
-              E-Mail: <b>[Kontakt-E-Mail des Betreibers]</b>
+              <b>[Paul Schleburg]</b><br />
+              [Hofmeisterstr. 11, 93053 Regensburg]<br />
+              E-Mail: <b>[wo.ist.paul49@gmail.com]</b>
             </Section>
 
             <Section title="2. Zweck & Rahmen">
@@ -76,15 +76,15 @@ export function DatenschutzPage() {
             <Section title="9. Deine Rechte">
               Du hast das Recht auf Auskunft, Berichtigung, Löschung und Einschränkung der Verarbeitung sowie
               auf Datenübertragbarkeit und Widerruf deiner Einwilligung. Zur Ausübung wende dich an den oben
-              genannten Verantwortlichen unter <b>[Kontakt-E-Mail des Betreibers]</b>. Außerdem steht dir ein
+              genannten Verantwortlichen unter <b>[wo.ist.paul49@gmail.com]</b>. Außerdem steht dir ein
               Beschwerderecht bei einer Datenschutz-Aufsichtsbehörde zu.
             </Section>
 
             <Section title="10. Kontakt">
-              Bei Fragen zum Datenschutz erreichst du uns unter <b>[Kontakt-E-Mail des Betreibers]</b>.
+              Bei Fragen zum Datenschutz erreichst du uns unter <b>[wo.ist.paul49@gmail.com]</b>.
             </Section>
 
-            <p className="text-xs text-slate-400 mt-4">Stand: [Datum einsetzen]</p>
+            <p className="text-xs text-slate-400 mt-4">Stand: [27.06.2026]</p>
           </GameCard>
         </div>
       </div>

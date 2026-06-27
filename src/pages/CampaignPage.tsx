@@ -11,7 +11,8 @@ export function CampaignPage() {
   const navigate = useNavigate()
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [images, setImages] = useState<EventImage[]>([])
-  const [progress, setProgress] = useState<Map<string, boolean>>(new Map()) // image_id -> abgeschlossen?
+  // image_id -> erreichte Punktzahl (Vorhandensein im Map = abgeschlossen)
+  const [done, setDone] = useState<Map<string, number>>(new Map())
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { if (campaignId && user) load() }, [campaignId, user])
@@ -34,13 +35,13 @@ export function CampaignPage() {
       const ids = imgs.map(i => i.id)
       // Abgeschlossen = im Kampagnen-Fortschritt gefunden ODER live korrekt gefunden
       const [attRes, progRes] = await Promise.all([
-        supabase.from('player_attempts').select('image_id, is_correct').eq('user_id', user!.id).in('image_id', ids),
-        supabase.from('campaign_progress').select('image_id, found').eq('campaign_id', campaignId).eq('user_id', user!.id).in('image_id', ids),
+        supabase.from('player_attempts').select('image_id, is_correct, points').eq('user_id', user!.id).in('image_id', ids),
+        supabase.from('campaign_progress').select('image_id, found, points').eq('campaign_id', campaignId).eq('user_id', user!.id).in('image_id', ids),
       ])
-      const done = new Map<string, boolean>()
-      for (const a of attRes.data ?? []) if (a.is_correct) done.set(a.image_id, true)
-      for (const p of progRes.data ?? []) if (p.found) done.set(p.image_id, true)
-      setProgress(done)
+      const map = new Map<string, number>()
+      for (const a of attRes.data ?? []) if (a.is_correct) map.set(a.image_id, a.points ?? 0)
+      for (const p of progRes.data ?? []) if (p.found) map.set(p.image_id, Math.max(map.get(p.image_id) ?? 0, p.points ?? 0))
+      setDone(map)
     }
     setLoading(false)
   }
@@ -49,7 +50,7 @@ export function CampaignPage() {
   if (!campaign) return <div className="p-8 text-center text-white/50">Kampagne nicht gefunden.</div>
 
   const isEventCampaign = !!campaign.original_event_id
-  const doneCount = images.filter(i => progress.get(i.id)).length
+  const doneCount = images.filter(i => done.has(i.id)).length
 
   return (
     <div className="p-4 max-w-lg mx-auto pt-4 pb-8">
@@ -57,7 +58,7 @@ export function CampaignPage() {
         <h1 className="text-2xl font-extrabold text-white">{campaign.title}</h1>
         {campaign.is_legacy && <span className="text-xs font-bold text-amber-300 border border-amber-300/50 rounded-full px-2 py-0.5">Legacy</span>}
       </div>
-      <p className="text-white/60 font-semibold mb-4">{doneCount} / {images.length} Bilder geschafft</p>
+      <p className="text-white/60 font-semibold mb-4">{doneCount} von {images.length} gefunden</p>
 
       <GameCard className="mb-6 !bg-[#efe2c4] !border-[#dcc99c] text-xs text-slate-600 py-3">
         {isEventCampaign
@@ -73,37 +74,39 @@ export function CampaignPage() {
       ) : (
         <div className="flex flex-col gap-3">
           {images.map((img, idx) => {
-            const done = !!progress.get(img.id)
-            const unlocked = idx === 0 || !!progress.get(images[idx - 1].id)
+            const completed = done.has(img.id)
+            const pts = done.get(img.id) ?? 0
+            const unlocked = idx === 0 || done.has(images[idx - 1].id)
+            const tappable = completed || unlocked
+            const current = unlocked && !completed
             return (
               <button
                 key={img.id}
-                disabled={!unlocked}
-                onClick={() => unlocked && navigate(`/world/${worldId}/campaign/${campaignId}/image/${img.id}`)}
-                className={`w-full text-left ${unlocked ? 'active:translate-y-[2px] transition-transform' : 'cursor-not-allowed'}`}
+                disabled={!tappable}
+                onClick={() => tappable && navigate(`/world/${worldId}/campaign/${campaignId}/image/${img.id}`)}
+                className={`w-full text-left ${tappable ? 'active:translate-y-[2px] transition-transform' : 'cursor-default'}`}
               >
-                <GameCard className={unlocked ? '' : 'opacity-60'}>
+                <GameCard className={!tappable ? 'opacity-50' : current ? '!border-violet-400' : ''}>
                   <div className="flex items-center gap-4">
                     <div className="relative w-20 h-14 rounded-xl overflow-hidden bg-slate-300 flex-shrink-0">
-                      {unlocked ? (
+                      {tappable && (
                         <>
                           <img src={img.image_url} alt="" className="w-full h-full object-cover" />
-                          {done && <div className="absolute top-1 right-1 bg-green-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shadow">✓</div>}
+                          {completed && <div className="absolute top-1 right-1 bg-green-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shadow">✓</div>}
                         </>
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-2xl">🔒</div>
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-extrabold text-slate-800">Bild {idx + 1}</p>
                       <p className="text-xs text-slate-500 mt-0.5">
-                        {!unlocked ? 'Erst das vorherige Bild finden' : done ? '✓ Geschafft' : 'Noch offen'}
+                        {completed ? (pts > 0 ? `✓ Geschafft · ${pts} Punkte` : '✓ Geschafft')
+                          : current ? 'Jetzt spielen' : 'Gesperrt'}
                       </p>
                     </div>
                     <div className="flex-shrink-0 text-sm font-bold">
-                      {!unlocked ? <span className="text-slate-400">🔒</span>
-                        : done ? <span className="text-green-600">Wiederholen →</span>
-                        : <span className="text-violet-600">Spielen →</span>}
+                      {completed ? <span className="text-green-600">Wiederholen →</span>
+                        : current ? <span className="text-violet-600">Spielen →</span>
+                        : null}
                     </div>
                   </div>
                 </GameCard>

@@ -123,7 +123,7 @@ export function WorldHomePage() {
                         <div className="min-w-0">
                           <p className="font-extrabold text-slate-800 truncate">{c.title}</p>
                           <p className="text-xs text-slate-500 mt-0.5">
-                            {c.is_legacy ? 'Legacy' : 'Kampagne'} · {p.done}/{p.total} geschafft
+                            {c.is_legacy ? 'Legacy' : 'Kampagne'} · {p.done} von {p.total} gefunden
                           </p>
                         </div>
                         <DotProgress total={p.total} done={p.done} />
@@ -147,11 +147,17 @@ export function WorldHomePage() {
 function DotProgress({ total, done }: { total: number; done: number }) {
   if (total === 0) return <span className="text-xs text-slate-400 flex-shrink-0">–</span>
   if (total > 12) return <span className="text-sm font-extrabold text-slate-600 flex-shrink-0">{done}/{total}</span>
+  // i < done = abgeschlossen (voll), i === done = aktuelles freigeschaltetes (halb/hervorgehoben), sonst gesperrt (leer)
   return (
     <div className="flex gap-1.5 flex-shrink-0">
-      {Array.from({ length: total }).map((_, i) => (
-        <span key={i} className={`w-3 h-3 rounded-full ${i < done ? 'bg-green-500 shadow-[inset_0_1px_0_#ffffff80]' : 'bg-slate-300'}`} />
-      ))}
+      {Array.from({ length: total }).map((_, i) => {
+        const cls = i < done
+          ? 'bg-green-500 shadow-[inset_0_1px_0_#ffffff80]'
+          : i === done
+            ? 'bg-green-200 ring-[1.5px] ring-green-500'
+            : 'bg-slate-300'
+        return <span key={i} className={`w-3 h-3 rounded-full ${cls}`} />
+      })}
     </div>
   )
 }
