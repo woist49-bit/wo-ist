@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { BadgeCheck, MoreVertical } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
+import { levelFromXp } from '../../lib/scoring'
 import { Button } from '../../components/ui/Button'
 import { GameCard } from '../../components/ui/GameCard'
 import { Input } from '../../components/ui/Input'
 import type { WorldMember, LiveEvent, Profile, Campaign, World } from '../../types'
+
+type Member = WorldMember & { profile: Profile }
 
 const LIGHT_AREA = 'w-full bg-white border-2 border-[#e6d3a3] rounded-xl px-4 py-3 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-400 transition resize-none'
 
@@ -13,7 +17,9 @@ export function AdminPage() {
   const { worldId } = useParams<{ worldId: string }>()
   const { user } = useAuth()
   const navigate = useNavigate()
-  const [members, setMembers] = useState<(WorldMember & { profile: Profile })[]>([])
+  const [members, setMembers] = useState<Member[]>([])
+  const [menuOpen, setMenuOpen] = useState<string | null>(null)
+  const [memberDialog, setMemberDialog] = useState<{ type: 'promote' | 'remove'; member: Member } | null>(null)
   const [events, setEvents] = useState<LiveEvent[]>([])
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [tab, setTab] = useState<'events' | 'members' | 'campaigns' | 'settings'>('events')
@@ -112,10 +118,26 @@ export function AdminPage() {
     }
   }
 
-  async function kickMember(memberId: string) {
-    if (!confirm('Spieler wirklich entfernen?')) return
-    await supabase.from('world_members').delete().eq('world_id', worldId).eq('user_id', memberId)
-    setMembers(m => m.filter(x => x.user_id !== memberId))
+  async function toggleCertify(m: Member) {
+    const next = !m.certified
+    await supabase.from('world_members').update({ certified: next }).eq('world_id', worldId).eq('user_id', m.user_id)
+    setMembers(prev => prev.map(x => x.user_id === m.user_id ? { ...x, certified: next } : x))
+  }
+
+  async function confirmPromote() {
+    if (!memberDialog) return
+    const id = memberDialog.member.user_id
+    await supabase.from('world_members').update({ role: 'admin' }).eq('world_id', worldId).eq('user_id', id)
+    setMembers(prev => prev.map(x => x.user_id === id ? { ...x, role: 'admin' } : x))
+    setMemberDialog(null); setMenuOpen(null)
+  }
+
+  async function confirmRemove() {
+    if (!memberDialog) return
+    const id = memberDialog.member.user_id
+    await supabase.from('world_members').delete().eq('world_id', worldId).eq('user_id', id)
+    setMembers(prev => prev.filter(x => x.user_id !== id))
+    setMemberDialog(null); setMenuOpen(null)
   }
 
   async function finishEvent(eventId: string) {
@@ -194,19 +216,45 @@ export function AdminPage() {
 
       {tab === 'members' && (
         <div className="flex flex-col gap-2">
-          {members.map(m => (
-            <GameCard key={m.user_id}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-extrabold text-slate-800">{m.profile?.username}</p>
-                  <p className="text-xs text-slate-500">{m.role === 'admin' ? '👑 Admin' : 'Spieler'}</p>
+          {members.map(m => {
+            const isMe = m.user_id === user?.id
+            const lvl = levelFromXp(m.profile?.global_xp ?? 0).level
+            return (
+              <GameCard key={m.user_id}>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-extrabold text-slate-800 truncate">{m.profile?.username}</p>
+                      {m.certified && <BadgeCheck size={16} className="text-sky-500 flex-shrink-0" aria-label="Zertifiziert" />}
+                      {isMe && <span className="text-xs text-slate-400 flex-shrink-0">(Du)</span>}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">Level {lvl} · {m.role === 'admin' ? '👑 Admin' : 'Spieler'}</p>
+                  </div>
+                  {!isMe && (
+                    <button
+                      onClick={() => setMenuOpen(menuOpen === m.user_id ? null : m.user_id)}
+                      className="flex-shrink-0 w-9 h-9 rounded-xl bg-slate-200 text-slate-600 flex items-center justify-center shadow-[0_2px_0_#94a3b8] active:translate-y-[1px] transition-all"
+                      aria-label="Aktionen"
+                    >
+                      <MoreVertical size={18} />
+                    </button>
+                  )}
                 </div>
-                {m.user_id !== user?.id && m.role !== 'admin' && (
-                  <Button size="sm" variant="danger" onClick={() => kickMember(m.user_id)}>Entfernen</Button>
+
+                {menuOpen === m.user_id && !isMe && (
+                  <div className="mt-3 pt-3 border-t border-black/10 flex flex-col gap-2">
+                    <Button size="sm" variant="secondary" onClick={() => toggleCertify(m)}>
+                      {m.certified ? 'Zertifizierung entfernen' : 'Zertifizieren'}
+                    </Button>
+                    {m.role !== 'admin' && (
+                      <Button size="sm" variant="info" onClick={() => setMemberDialog({ type: 'promote', member: m })}>Zu Admin befördern</Button>
+                    )}
+                    <Button size="sm" variant="danger" onClick={() => setMemberDialog({ type: 'remove', member: m })}>Aus Spielwelt entfernen</Button>
+                  </div>
                 )}
-              </div>
-            </GameCard>
-          ))}
+              </GameCard>
+            )
+          })}
         </div>
       )}
 
@@ -271,6 +319,27 @@ export function AdminPage() {
             <Button variant="success" loading={settingsSaving} onClick={saveSettings} className="w-full">Speichern</Button>
           </div>
         </GameCard>
+      )}
+
+      {memberDialog && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-6">
+          <GameCard className="w-full max-w-sm">
+            <p className="font-extrabold text-slate-800 text-lg mb-1">
+              {memberDialog.type === 'promote' ? 'Zum Admin ernennen?' : 'Wirklich entfernen?'}
+            </p>
+            <p className="text-slate-600 text-sm mb-4">
+              {memberDialog.type === 'promote'
+                ? `Möchtest du ${memberDialog.member.profile?.username} zum Admin ernennen? Er erhält dann alle Admin-Rechte in dieser Spielwelt.`
+                : `Möchtest du ${memberDialog.member.profile?.username} wirklich aus der Spielwelt entfernen? Er kann danach nicht mehr auf diese Spielwelt zugreifen.`}
+            </p>
+            <div className="flex gap-3">
+              <Button variant="secondary" className="flex-1" onClick={() => setMemberDialog(null)}>Abbrechen</Button>
+              {memberDialog.type === 'promote'
+                ? <Button variant="info" className="flex-1" onClick={confirmPromote}>Bestätigen</Button>
+                : <Button variant="danger" className="flex-1" onClick={confirmRemove}>Entfernen</Button>}
+            </div>
+          </GameCard>
+        </div>
       )}
     </div>
   )

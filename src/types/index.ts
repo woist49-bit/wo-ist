@@ -21,6 +21,7 @@ export interface WorldMember {
   world_id: string
   user_id: string
   role: 'admin' | 'user'
+  certified: boolean
   joined_at: string
   profile?: Profile
 }

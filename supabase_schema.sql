@@ -58,9 +58,13 @@ create table world_members (
   world_id uuid references worlds(id) on delete cascade,
   user_id uuid references profiles(id) on delete cascade,
   role text not null default 'user' check (role in ('admin', 'user')),
+  certified boolean not null default false,
   joined_at timestamptz not null default now(),
   primary key (world_id, user_id)
 );
+
+-- Zertifizierungs-Badge (pro Spielwelt)
+alter table world_members add column if not exists certified boolean not null default false;
 
 create table live_events (
   id uuid primary key default gen_random_uuid(),
@@ -179,6 +183,30 @@ create policy "Users can delete own membership" on world_members for delete
   using (auth.uid() = user_id);
 create policy "Admins can delete any membership" on world_members for delete
   using (exists (select 1 from world_members wm where wm.world_id = world_members.world_id and wm.user_id = auth.uid() and wm.role = 'admin'));
+create policy "Admins can update memberships" on world_members for update
+  using (exists (select 1 from world_members wm where wm.world_id = world_members.world_id and wm.user_id = auth.uid() and wm.role = 'admin'))
+  with check (exists (select 1 from world_members wm where wm.world_id = world_members.world_id and wm.user_id = auth.uid() and wm.role = 'admin'));
+
+-- Letzter Admin verlässt/wird entfernt -> Admin-Rolle automatisch ans dienstälteste Mitglied
+create or replace function transfer_admin_if_last() returns trigger
+language plpgsql security definer as $$
+begin
+  if old.role = 'admin' and not exists (
+    select 1 from world_members where world_id = old.world_id and role = 'admin'
+  ) then
+    update world_members set role = 'admin'
+    where world_id = old.world_id
+      and user_id = (
+        select user_id from world_members where world_id = old.world_id
+        order by joined_at asc limit 1
+      );
+  end if;
+  return old;
+end;
+$$;
+drop trigger if exists transfer_admin_after_delete on world_members;
+create trigger transfer_admin_after_delete after delete on world_members
+  for each row execute function transfer_admin_if_last();
 
 -- live_events
 create policy "Members can view events" on live_events for select
