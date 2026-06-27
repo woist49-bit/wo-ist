@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { Lock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { GameCard } from '../components/ui/GameCard'
@@ -89,11 +90,13 @@ export function CampaignPage() {
                 <GameCard className={!tappable ? 'opacity-50' : current ? '!border-violet-400' : ''}>
                   <div className="flex items-center gap-4">
                     <div className="relative w-20 h-14 rounded-xl overflow-hidden bg-slate-300 flex-shrink-0">
-                      {tappable && (
+                      {tappable ? (
                         <>
                           <img src={img.image_url} alt="" className="w-full h-full object-cover" />
                           {completed && <div className="absolute top-1 right-1 bg-green-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shadow">✓</div>}
                         </>
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-slate-500"><Lock size={22} strokeWidth={2.5} /></div>
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
