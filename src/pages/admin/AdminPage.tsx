@@ -19,7 +19,7 @@ export function AdminPage() {
   const navigate = useNavigate()
   const [members, setMembers] = useState<Member[]>([])
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
-  const [memberDialog, setMemberDialog] = useState<{ type: 'promote' | 'remove'; member: Member } | null>(null)
+  const [memberDialog, setMemberDialog] = useState<{ type: 'promote' | 'demote' | 'remove'; member: Member } | null>(null)
   const [events, setEvents] = useState<LiveEvent[]>([])
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [tab, setTab] = useState<'events' | 'members' | 'campaigns' | 'settings'>('events')
@@ -132,6 +132,14 @@ export function AdminPage() {
     setMemberDialog(null); setMenuOpen(null)
   }
 
+  async function confirmDemote() {
+    if (!memberDialog) return
+    const id = memberDialog.member.user_id
+    await supabase.from('world_members').update({ role: 'user' }).eq('world_id', worldId).eq('user_id', id)
+    setMembers(prev => prev.map(x => x.user_id === id ? { ...x, role: 'user' } : x))
+    setMemberDialog(null); setMenuOpen(null)
+  }
+
   async function confirmRemove() {
     if (!memberDialog) return
     const id = memberDialog.member.user_id
@@ -214,23 +222,25 @@ export function AdminPage() {
         </div>
       )}
 
-      {tab === 'members' && (
-        <div className="flex flex-col gap-2">
-          {members.map(m => {
-            const isMe = m.user_id === user?.id
-            const lvl = levelFromXp(m.profile?.global_xp ?? 0).level
-            return (
-              <GameCard key={m.user_id}>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <p className="font-extrabold text-slate-800 truncate">{m.profile?.username}</p>
-                      {m.certified && <BadgeCheck size={16} className="text-sky-500 flex-shrink-0" aria-label="Zertifiziert" />}
-                      {isMe && <span className="text-xs text-slate-400 flex-shrink-0">(Du)</span>}
+      {tab === 'members' && (() => {
+        const adminCount = members.filter(m => m.role === 'admin').length
+        return (
+          <div className="flex flex-col gap-2">
+            {members.map(m => {
+              const isMe = m.user_id === user?.id
+              const lvl = levelFromXp(m.profile?.global_xp ?? 0).level
+              const canSelfDemote = isMe && m.role === 'admin' && adminCount > 1
+              return (
+                <GameCard key={m.user_id}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <p className="font-extrabold text-slate-800 truncate">{m.profile?.username}</p>
+                        {m.certified && <BadgeCheck size={16} className="text-sky-500 flex-shrink-0" aria-label="Zertifiziert" />}
+                        {isMe && <span className="text-xs text-slate-400 flex-shrink-0">(Du)</span>}
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">Level {lvl} · {m.role === 'admin' ? '👑 Admin' : 'Spieler'}</p>
                     </div>
-                    <p className="text-xs text-slate-500 mt-0.5">Level {lvl} · {m.role === 'admin' ? '👑 Admin' : 'Spieler'}</p>
-                  </div>
-                  {!isMe && (
                     <button
                       onClick={() => setMenuOpen(menuOpen === m.user_id ? null : m.user_id)}
                       className="flex-shrink-0 w-9 h-9 rounded-xl bg-slate-200 text-slate-600 flex items-center justify-center shadow-[0_2px_0_#94a3b8] active:translate-y-[1px] transition-all"
@@ -238,25 +248,33 @@ export function AdminPage() {
                     >
                       <MoreVertical size={18} />
                     </button>
-                  )}
-                </div>
-
-                {menuOpen === m.user_id && !isMe && (
-                  <div className="mt-3 pt-3 border-t border-black/10 flex flex-col gap-2">
-                    <Button size="sm" variant="secondary" onClick={() => toggleCertify(m)}>
-                      {m.certified ? 'Zertifizierung entfernen' : 'Zertifizieren'}
-                    </Button>
-                    {m.role !== 'admin' && (
-                      <Button size="sm" variant="info" onClick={() => setMemberDialog({ type: 'promote', member: m })}>Zu Admin befördern</Button>
-                    )}
-                    <Button size="sm" variant="danger" onClick={() => setMemberDialog({ type: 'remove', member: m })}>Aus Spielwelt entfernen</Button>
                   </div>
-                )}
-              </GameCard>
-            )
-          })}
-        </div>
-      )}
+
+                  {menuOpen === m.user_id && (
+                    <div className="mt-3 pt-3 border-t border-black/10 flex flex-col gap-2">
+                      {isMe ? (
+                        canSelfDemote
+                          ? <Button size="sm" variant="secondary" onClick={() => setMemberDialog({ type: 'demote', member: m })}>Admin-Rolle abgeben</Button>
+                          : <p className="text-xs text-slate-500 text-center py-1">Du bist der einzige Admin – keine Aktionen für dich verfügbar.</p>
+                      ) : (
+                        <>
+                          <Button size="sm" variant="secondary" onClick={() => toggleCertify(m)}>
+                            {m.certified ? 'Zertifizierung entfernen' : 'Zertifizieren'}
+                          </Button>
+                          {m.role === 'admin'
+                            ? <Button size="sm" variant="info" onClick={() => setMemberDialog({ type: 'demote', member: m })}>Zu Spieler herabstufen</Button>
+                            : <Button size="sm" variant="info" onClick={() => setMemberDialog({ type: 'promote', member: m })}>Zu Admin befördern</Button>}
+                          <Button size="sm" variant="danger" onClick={() => setMemberDialog({ type: 'remove', member: m })}>Aus Spielwelt entfernen</Button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </GameCard>
+              )
+            })}
+          </div>
+        )
+      })()}
 
       {tab === 'campaigns' && (
         <div className="flex flex-col gap-4">
@@ -325,18 +343,26 @@ export function AdminPage() {
         <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-6">
           <GameCard className="w-full max-w-sm">
             <p className="font-extrabold text-slate-800 text-lg mb-1">
-              {memberDialog.type === 'promote' ? 'Zum Admin ernennen?' : 'Wirklich entfernen?'}
+              {memberDialog.type === 'promote' ? 'Zum Admin ernennen?'
+                : memberDialog.type === 'demote' ? 'Herabstufen?'
+                : 'Wirklich entfernen?'}
             </p>
             <p className="text-slate-600 text-sm mb-4">
               {memberDialog.type === 'promote'
                 ? `Möchtest du ${memberDialog.member.profile?.username} zum Admin ernennen? Er erhält dann alle Admin-Rechte in dieser Spielwelt.`
-                : `Möchtest du ${memberDialog.member.profile?.username} wirklich aus der Spielwelt entfernen? Er kann danach nicht mehr auf diese Spielwelt zugreifen.`}
+                : memberDialog.type === 'demote'
+                  ? (memberDialog.member.user_id === user?.id
+                      ? 'Möchtest du deine Admin-Rolle abgeben? Du wirst dann zum normalen Spieler.'
+                      : `Möchtest du ${memberDialog.member.profile?.username} die Admin-Rolle entziehen? ${memberDialog.member.profile?.username} wird dann zum normalen Spieler.`)
+                  : `Möchtest du ${memberDialog.member.profile?.username} wirklich aus der Spielwelt entfernen? Er kann danach nicht mehr auf diese Spielwelt zugreifen.`}
             </p>
             <div className="flex gap-3">
               <Button variant="secondary" className="flex-1" onClick={() => setMemberDialog(null)}>Abbrechen</Button>
               {memberDialog.type === 'promote'
                 ? <Button variant="info" className="flex-1" onClick={confirmPromote}>Bestätigen</Button>
-                : <Button variant="danger" className="flex-1" onClick={confirmRemove}>Entfernen</Button>}
+                : memberDialog.type === 'demote'
+                  ? <Button variant="info" className="flex-1" onClick={confirmDemote}>Herabstufen</Button>
+                  : <Button variant="danger" className="flex-1" onClick={confirmRemove}>Entfernen</Button>}
             </div>
           </GameCard>
         </div>
