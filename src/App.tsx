@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import { AppLayout, WorldLayout } from './components/layout/AppLayout'
 import { ToastProvider } from './stores/toast'
+import { NotificationProvider } from './stores/notifications'
 import { ToastContainer } from './components/ui/ToastContainer'
 import { AuthPage } from './pages/AuthPage'
 import { DatenschutzPage } from './pages/DatenschutzPage'
@@ -33,6 +34,7 @@ export function App() {
 
   return (
     <ToastProvider>
+      <NotificationProvider>
       <BrowserRouter>
       <Routes>
         <Route path="/" element={user ? <Navigate to="/worlds" replace /> : <AuthPage />} />
@@ -60,6 +62,7 @@ export function App() {
       </Routes>
       <ToastContainer />
     </BrowserRouter>
+      </NotificationProvider>
     </ToastProvider>
   )
 }

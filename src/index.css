@@ -55,6 +55,12 @@ input[type="range"] { accent-color: #6366f1; }
 }
 .animate-slide-in-right { animation: slideInRight 0.25s ease-out; }
 
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+.animate-pop-in { animation: popIn 0.25s ease-out; }
+
 /* Native Datum/Uhrzeit-Felder respektieren width:100% auf WebKit nicht zuverlässig
    und laufen sonst über den Rand. Eigenstyling aus + auf Containerbreite begrenzen. */
 input[type="date"],

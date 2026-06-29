@@ -263,8 +263,9 @@ begin
 end;
 $$;
 
+-- Gibt true zurück, wenn das Achievement NEU freigeschaltet wurde (für das Banner)
 create or replace function unlock_achievement(p_user_id uuid, p_world_id uuid, p_key text)
-returns void language plpgsql security definer as $$
+returns boolean language plpgsql security definer as $$
 declare
   xp_rewards jsonb := '{
     "first_find": 100, "first_event": 100, "legacy_first": 150, "near_miss": 100,
@@ -282,7 +283,9 @@ begin
     if xp is not null then
       perform add_xp(p_user_id, xp, p_world_id);
     end if;
+    return true;
   end if;
+  return false;
 end;
 $$;
 

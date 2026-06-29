@@ -3,9 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ChevronLeft } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useToast } from '../stores/toast'
-import { calcPoints, isHit, distanceFraction } from '../lib/scoring'
-import { ACHIEVEMENT_MAP } from '../lib/achievements'
+import { useNotifications } from '../stores/notifications'
+import { calcPoints, isHit, distanceFraction, levelFromXp } from '../lib/scoring'
 import { Button } from '../components/ui/Button'
 import { GameCard } from '../components/ui/GameCard'
 import { IconButton } from '../components/ui/IconButton'
@@ -15,7 +14,7 @@ import type { EventImage, PlayerAttempt } from '../types'
 export function ImageGamePage() {
   const { worldId, imageId, campaignId } = useParams<{ worldId: string; imageId: string; campaignId: string }>()
   const { user } = useAuth()
-  const { addToast } = useToast()
+  const { triggerAchievement, triggerLevelUp } = useNotifications()
   const navigate = useNavigate()
   const isCampaign = !!campaignId
 
@@ -87,8 +86,7 @@ export function ImageGamePage() {
         }, { onConflict: 'campaign_id,image_id,user_id' })
         setCampaignFound(true)
         if (awarded > 0) {
-          await supabase.rpc('add_xp', { p_user_id: user.id, p_xp: awarded, p_world_id: worldId })
-          await checkAchievements({ hit, seconds, dist })
+          await awardAndNotify(awarded, seconds, dist, true)
         }
       }
       setLastHit(hit); setLastPoints(awarded); setRevealed(true); setSubmitting(false)
@@ -104,8 +102,7 @@ export function ImageGamePage() {
     if (data) {
       setLiveAttempt(data)
       if (hit) {
-        await supabase.rpc('add_xp', { p_user_id: user.id, p_xp: points, p_world_id: worldId })
-        await checkAchievements({ hit, seconds, dist })
+        await awardAndNotify(points, seconds, dist, true)
       }
     }
     setLastHit(hit); setLastPoints(points); setRevealed(true); setSubmitting(false)
@@ -133,23 +130,32 @@ export function ImageGamePage() {
     navigate(-1)
   }
 
-  async function checkAchievements({ hit, seconds, dist }: { hit: boolean; seconds: number; dist: number }) {
+  // Vergibt XP + schaltet Achievements frei und löst die Benachrichtigungen aus
+  // (Banner pro neu freigeschaltetem Achievement, Level-Up-Overlay falls Level gestiegen).
+  async function awardAndNotify(pointsToAdd: number, seconds: number, dist: number, hit: boolean) {
     if (!user || !worldId) return
+    const { data: before } = await supabase.from('profiles').select('global_xp').eq('id', user.id).single()
+    const oldXp = before?.global_xp ?? 0
+
+    if (pointsToAdd > 0) {
+      await supabase.rpc('add_xp', { p_user_id: user.id, p_xp: pointsToAdd, p_world_id: worldId })
+    }
+
     const toUnlock: string[] = []
     if (hit) toUnlock.push('first_find')
     if (hit && seconds < 5) toUnlock.push('eagle_eye')
     if (hit && seconds > 300) toUnlock.push('patient_finder')
     if (!hit && dist < 0.05) toUnlock.push('near_miss')
     for (const key of toUnlock) {
-      const { error } = await supabase.rpc('unlock_achievement', { p_user_id: user.id, p_world_id: worldId, p_key: key })
-      if (!error) {
-        const a = ACHIEVEMENT_MAP[key]
-        if (a) {
-          const medal = a.tier === 'gold' ? '🥇' : a.tier === 'silver' ? '🥈' : '🥉'
-          addToast(`${medal} ${a.name}! +${a.xp_reward} XP`, 'success', 5000)
-        }
-      }
+      const { data: isNew } = await supabase.rpc('unlock_achievement', { p_user_id: user.id, p_world_id: worldId, p_key: key })
+      if (isNew) triggerAchievement(key)
     }
+
+    const { data: after } = await supabase.from('profiles').select('global_xp').eq('id', user.id).single()
+    const newXp = after?.global_xp ?? oldXp
+    const oldLevel = levelFromXp(oldXp).level
+    const nl = levelFromXp(newXp)
+    if (nl.level > oldLevel) triggerLevelUp(nl.level, nl.xpNeeded - nl.xpIntoLevel)
   }
 
   if (loading) return <LoadingScreen />
