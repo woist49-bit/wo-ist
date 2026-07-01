@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { Card } from '../components/ui/Card'
+import { GameCard } from '../components/ui/GameCard'
 import { levelFromXp } from '../lib/scoring'
 import type { LiveEvent, EventImage, PlayerAttempt, EventLeaderboardEntry } from '../types'
 
@@ -44,77 +45,90 @@ export function EventPage() {
   const totalPoints = Array.from(attempts.values()).reduce((s, a) => s + a.points, 0)
 
   return (
-    <div className="p-4 max-w-lg mx-auto pt-6">
-      <button onClick={() => navigate(`/world/${worldId}`)} className="text-white/40 text-sm mb-4 hover:text-white/70">← Zurück</button>
-      <h1 className="text-2xl font-bold text-white mb-1">{event.title}</h1>
-      <p className="text-white/40 text-sm mb-2">{formatDateRange(event.starts_at, event.ends_at)}</p>
-      <p className="text-indigo-400 font-semibold mb-6">Deine Punkte: {totalPoints}</p>
+    <div className="p-4 max-w-lg mx-auto pt-5 pb-8">
+      <h1 className="text-2xl font-extrabold text-white mb-1">{event.title}</h1>
+      <p className="text-white/50 text-sm mb-3">{formatDateRange(event.starts_at, event.ends_at)}</p>
+      <div className="inline-block bg-amber-400 text-amber-950 font-extrabold text-sm rounded-full px-4 py-1.5 mb-5 shadow-[0_3px_0_#b45309,inset_0_1px_0_#ffffff80]">
+        Deine Punkte: {totalPoints.toLocaleString()}
+      </div>
 
       {images.length === 0 ? (
-        <Card className="text-center py-12 text-white/40">
+        <GameCard className="text-center py-12 text-slate-400">
           <p className="text-4xl mb-3">⏳</p>
-          <p>Noch kein Bild freigeschaltet.</p>
-        </Card>
+          <p className="font-semibold">Noch kein Bild freigeschaltet.</p>
+        </GameCard>
       ) : (
         <div className="flex flex-col gap-3">
           {images.map((img, idx) => {
             const att = attempts.get(img.id)
             const played = !!att
             return (
-              <button key={img.id} onClick={() => navigate(`/world/${worldId}/event/${eventId}/image/${img.id}`)} className="w-full text-left">
-                <Card className={`hover:bg-white/10 transition-colors overflow-hidden ${played ? 'border-white/5' : 'border-indigo-500/30'}`}>
+              <button
+                key={img.id}
+                onClick={() => navigate(`/world/${worldId}/event/${eventId}/image/${img.id}`)}
+                className="w-full text-left active:translate-y-[2px] transition-transform"
+              >
+                <GameCard className={played ? '' : '!border-violet-400'}>
                   <div className="flex items-center gap-4">
-                    <div className="relative w-20 h-14 rounded-lg overflow-hidden bg-slate-800 flex-shrink-0">
+                    <div className="relative w-20 h-14 rounded-xl overflow-hidden bg-slate-300 flex-shrink-0">
                       <img src={img.image_url} alt="" className="w-full h-full object-cover" />
-                      {!played && <div className="absolute inset-0 flex items-center justify-center bg-black/20"><span className="text-2xl">🔍</span></div>}
+                      {!played && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 text-white">
+                          <Search size={20} strokeWidth={2.5} />
+                        </div>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-white">Bild {idx + 1}</p>
-                      {img.description && <p className="text-xs text-white/60 mt-0.5 line-clamp-2">{img.description}</p>}
-                      <p className="text-xs text-white/40 mt-0.5">{formatDate(img.unlocks_at)}</p>
+                      <p className="font-extrabold text-slate-800">Bild {idx + 1}</p>
+                      {img.description && <p className="text-xs text-slate-600 mt-0.5 line-clamp-2">{img.description}</p>}
+                      <p className="text-xs text-slate-500 mt-0.5">{formatDate(img.unlocks_at)}</p>
                     </div>
-                    <div className="text-right flex-shrink-0">
+                    <div className="text-right flex-shrink-0 text-sm font-bold">
                       {played ? (
-                        <div className={att.is_correct ? 'text-green-400' : 'text-red-400'}>
-                          <p className="font-bold">{att.is_correct ? `+${att.points}` : '✗'}</p>
-                          <p className="text-xs opacity-70">{att.time_seconds}s</p>
-                        </div>
+                        att.is_correct ? (
+                          <>
+                            <span className="text-green-600">+{att.points}</span>
+                            <p className="text-[11px] text-slate-400 font-semibold">{att.time_seconds}s</p>
+                          </>
+                        ) : (
+                          <span className="text-red-500">✗ Daneben</span>
+                        )
                       ) : (
-                        <span className="text-indigo-400 text-sm font-medium">Spielen →</span>
+                        <span className="text-violet-600">Spielen →</span>
                       )}
                     </div>
                   </div>
-                </Card>
+                </GameCard>
               </button>
             )
           })}
         </div>
       )}
 
-      <h2 className="text-lg font-bold text-white mt-8 mb-3">🏆 Event-Rangliste</h2>
+      <h2 className="text-lg font-extrabold text-white mt-8 mb-3">🏆 Event-Rangliste</h2>
       {board.length === 0 ? (
-        <Card className="text-center py-8 text-white/40 text-sm">Noch keine Punkte gesammelt.</Card>
+        <GameCard className="text-center py-8 text-slate-400 text-sm font-semibold">Noch keine Punkte gesammelt.</GameCard>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2.5">
           {board.map((entry, idx) => {
             const isMe = entry.user_id === user?.id
             const { level } = levelFromXp(entry.xp)
-            const badge = idx === 0 ? 'bg-yellow-500 text-black' : idx === 1 ? 'bg-slate-400 text-black' : idx === 2 ? 'bg-amber-700 text-white' : 'bg-white/10 text-white/60'
             return (
-              <Card key={entry.user_id} className={isMe ? 'border-indigo-500/60 bg-indigo-900/20' : ''}>
+              <GameCard key={entry.user_id} className={`!py-3 ${isMe ? '!border-violet-400' : ''}`}>
                 <div className="flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${badge}`}>
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-extrabold text-sm flex-shrink-0 shadow-[inset_0_1px_0_#ffffff80] ${rankBadge(idx)}`}>
                     {idx + 1}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className={`font-semibold truncate ${isMe ? 'text-indigo-300' : 'text-white'}`}>
-                      {entry.username} {isMe && '(Du)'}
-                    </p>
-                    <p className="text-xs text-white/40">Lvl {level} · {entry.finds} {entry.finds === 1 ? 'Fund' : 'Funde'}</p>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-extrabold text-slate-800 truncate">{entry.username}</span>
+                      {isMe && <span className="text-xs text-slate-400 flex-shrink-0">(Du)</span>}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">Lvl {level} · {entry.finds} {entry.finds === 1 ? 'Fund' : 'Funde'}</p>
                   </div>
-                  <p className="font-bold text-white text-lg flex-shrink-0">{entry.total_points.toLocaleString()}</p>
+                  <p className="font-extrabold text-slate-800 text-lg flex-shrink-0">{entry.total_points.toLocaleString()}</p>
                 </div>
-              </Card>
+              </GameCard>
             )
           })}
         </div>
@@ -122,6 +136,12 @@ export function EventPage() {
     </div>
   )
 }
+
+const rankBadge = (idx: number) =>
+  idx === 0 ? 'bg-yellow-400 text-yellow-900'
+  : idx === 1 ? 'bg-slate-300 text-slate-700'
+  : idx === 2 ? 'bg-amber-600 text-white'
+  : 'bg-slate-200 text-slate-500'
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })

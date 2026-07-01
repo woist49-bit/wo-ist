@@ -2,9 +2,13 @@ import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { ACHIEVEMENTS, TIER_COLORS, TIER_BG } from '../lib/achievements'
-import { Card } from '../components/ui/Card'
+import { ACHIEVEMENTS } from '../lib/achievements'
+import { GameCard } from '../components/ui/GameCard'
 import type { PlayerAchievement } from '../types'
+
+// Auf dem beigen GameCard lesbare Tier-Farben (die globalen TIER_COLORS sind für dunklen Grund).
+const TIER_TEXT = { gold: 'text-yellow-600', silver: 'text-slate-500', bronze: 'text-amber-700' }
+const TIER_HEAD = { gold: 'text-yellow-300', silver: 'text-slate-300', bronze: 'text-amber-400' }
 
 export function AchievementsPage() {
   const { worldId } = useParams<{ worldId: string }>()
@@ -24,32 +28,32 @@ export function AchievementsPage() {
   const tiers = ['gold', 'silver', 'bronze'] as const
 
   return (
-    <div className="p-4 max-w-lg mx-auto pt-6">
-      <h1 className="text-2xl font-bold text-white mb-1">Erfolge</h1>
-      <p className="text-white/40 text-sm mb-6">{earned.size} / {ACHIEVEMENTS.length} freigeschaltet</p>
+    <div className="p-4 max-w-lg mx-auto pt-5 pb-8">
+      <h1 className="text-2xl font-extrabold text-white mb-1">Erfolge</h1>
+      <p className="text-white/50 text-sm mb-6">{earned.size} / {ACHIEVEMENTS.length} freigeschaltet</p>
 
       {loading ? (
         <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" /></div>
       ) : (
         tiers.map(tier => (
           <section key={tier} className="mb-6">
-            <h2 className={`text-sm font-bold uppercase tracking-wider mb-3 ${TIER_COLORS[tier]}`}>
+            <h2 className={`text-sm font-extrabold uppercase tracking-wider mb-3 ${TIER_HEAD[tier]}`}>
               {tier === 'gold' ? '🥇 Gold' : tier === 'silver' ? '🥈 Silber' : '🥉 Bronze'}
             </h2>
             <div className="flex flex-col gap-2">
               {ACHIEVEMENTS.filter(a => a.tier === tier).map(a => {
                 const unlocked = earned.has(a.key)
                 return (
-                  <Card key={a.key} className={`transition-all ${unlocked ? TIER_BG[tier] : 'opacity-40'}`}>
+                  <GameCard key={a.key} className={unlocked ? '' : 'opacity-55'}>
                     <div className="flex items-center gap-3">
-                      <div className="text-2xl">{unlocked ? tierEmoji(tier) : '🔒'}</div>
+                      <div className="text-2xl flex-shrink-0 w-7 text-center">{unlocked ? tierEmoji(tier) : '🔒'}</div>
                       <div className="flex-1 min-w-0">
-                        <p className={`font-semibold ${unlocked ? 'text-white' : 'text-white/60'}`}>{a.name}</p>
-                        <p className="text-xs text-white/50 mt-0.5">{a.description}</p>
+                        <p className="font-extrabold text-slate-800">{a.name}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">{a.description}</p>
                       </div>
-                      <p className={`text-sm font-bold flex-shrink-0 ${TIER_COLORS[tier]}`}>+{a.xp_reward} XP</p>
+                      <p className={`text-sm font-extrabold flex-shrink-0 ${unlocked ? TIER_TEXT[tier] : 'text-slate-400'}`}>+{a.xp_reward} XP</p>
                     </div>
-                  </Card>
+                  </GameCard>
                 )
               })}
             </div>
