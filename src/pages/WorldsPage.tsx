@@ -1,5 +1,6 @@
 import { useState, useEffect, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Users, Layers } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { Button } from '../components/ui/Button'
@@ -7,10 +8,13 @@ import { Input } from '../components/ui/Input'
 import { GameCard } from '../components/ui/GameCard'
 import type { World } from '../types'
 
+interface WorldStats { members: number; campaigns: number; activeEvent: string | null }
+
 export function WorldsPage() {
   const { user, profile } = useAuth()
   const navigate = useNavigate()
   const [worlds, setWorlds] = useState<World[]>([])
+  const [stats, setStats] = useState<Record<string, WorldStats>>({})
   const [showCreate, setShowCreate] = useState(false)
   const [showJoin, setShowJoin] = useState(false)
   const [newName, setNewName] = useState('')
@@ -28,7 +32,24 @@ export function WorldsPage() {
       .select('world_id, worlds(*)')
       .eq('user_id', user.id)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (data) setWorlds(data.map((r: any) => r.worlds).filter(Boolean))
+    const ws = (data ?? []).map((r: any) => r.worlds).filter(Boolean) as World[]
+    setWorlds(ws)
+
+    const ids = ws.map(w => w.id)
+    if (!ids.length) { setStats({}); return }
+
+    // Kennzahlen pro Welt: Mitglieder, Kampagnen, laufendes Live-Event
+    const [membersRes, campaignsRes, eventsRes] = await Promise.all([
+      supabase.from('world_members').select('world_id').in('world_id', ids),
+      supabase.from('campaigns').select('world_id').in('world_id', ids),
+      supabase.from('live_events').select('world_id, title').eq('status', 'active').in('world_id', ids),
+    ])
+    const next: Record<string, WorldStats> = {}
+    for (const id of ids) next[id] = { members: 0, campaigns: 0, activeEvent: null }
+    for (const m of membersRes.data ?? []) if (next[m.world_id]) next[m.world_id].members++
+    for (const c of campaignsRes.data ?? []) if (next[c.world_id]) next[c.world_id].campaigns++
+    for (const e of eventsRes.data ?? []) if (next[e.world_id]) next[e.world_id].activeEvent = e.title
+    setStats(next)
   }
 
   async function createWorld(e: FormEvent) {
@@ -139,19 +160,34 @@ export function WorldsPage() {
           </GameCard>
         ) : (
           <div className="flex flex-col gap-3">
-            {worlds.map(w => (
-              <button key={w.id} onClick={() => navigate(`/world/${w.id}`)} className="w-full text-left active:translate-y-[2px] transition-transform">
-                <GameCard>
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-extrabold text-slate-800 truncate">{w.name}</p>
-                      <p className="text-slate-500 text-sm mt-0.5">Code: {w.join_code}</p>
+            {worlds.map(w => {
+              const s = stats[w.id]
+              return (
+                <button key={w.id} onClick={() => navigate(`/world/${w.id}`)} className="w-full text-left active:translate-y-[2px] transition-transform">
+                  <GameCard>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="font-extrabold text-slate-800 truncate">{w.name}</p>
+                          {s?.activeEvent && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-white bg-rose-500 rounded-full px-2 py-0.5 flex-shrink-0 shadow-[inset_0_1px_0_#ffffff59]">
+                              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> LIVE
+                            </span>
+                          )}
+                        </div>
+                        {w.description && <p className="text-slate-500 text-xs mt-0.5 line-clamp-1">{w.description}</p>}
+                        <div className="flex items-center gap-3 mt-2 text-xs font-semibold text-slate-500">
+                          <span className="inline-flex items-center gap-1"><Users size={13} strokeWidth={2.5} /> {s?.members ?? '–'}</span>
+                          <span className="inline-flex items-center gap-1"><Layers size={13} strokeWidth={2.5} /> {s?.campaigns ?? 0} {(s?.campaigns ?? 0) === 1 ? 'Kampagne' : 'Kampagnen'}</span>
+                          {s?.activeEvent && <span className="text-rose-500 truncate">· {s.activeEvent}</span>}
+                        </div>
+                      </div>
+                      <span className="text-slate-400 text-xl flex-shrink-0">›</span>
                     </div>
-                    <span className="text-slate-400 text-xl flex-shrink-0">›</span>
-                  </div>
-                </GameCard>
-              </button>
-            ))}
+                  </GameCard>
+                </button>
+              )
+            })}
           </div>
         )}
       </div>
