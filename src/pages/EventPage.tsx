@@ -48,7 +48,9 @@ export function EventPage() {
   const nextImage = images
     .filter(img => new Date(img.unlocks_at).getTime() > now)
     .sort((a, b) => new Date(a.unlocks_at).getTime() - new Date(b.unlocks_at).getTime())[0] ?? null
-  const eventEnded = now > new Date(event.ends_at).getTime()
+  // Event ist erst "vorbei", wenn das 24h-Fenster des letzten Bildes abgelaufen ist
+  const lastUnlockMs = images.length ? Math.max(...images.map(i => new Date(i.unlocks_at).getTime())) : 0
+  const trulyOver = now >= lastUnlockMs + IMAGE_PLAY_WINDOW_MS
 
   return (
     <div className="p-4 max-w-lg mx-auto pt-5 pb-8">
@@ -133,9 +135,18 @@ export function EventPage() {
               </p>
             </div>
           </GameCard>
+        ) : !trulyOver ? (
+          <GameCard className="mt-4 !py-3">
+            <div className="flex items-center gap-3">
+              <Clock size={20} strokeWidth={2.5} className="text-violet-500 flex-shrink-0" />
+              <p className="text-sm font-semibold text-slate-700">
+                Letztes Bild ist da – Event endet in {formatCountdown(lastUnlockMs + IMAGE_PLAY_WINDOW_MS - now)}
+              </p>
+            </div>
+          </GameCard>
         ) : (
           <GameCard className="mt-4 !py-3 text-center text-sm font-semibold text-slate-500">
-            {eventEnded ? 'Dieses Event ist beendet.' : 'Das war das letzte Bild – das Event läuft bald aus.'}
+            Dieses Event ist beendet.
           </GameCard>
         )
       )}

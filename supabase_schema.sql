@@ -324,7 +324,6 @@ language sql security definer as $$
     from player_attempts pa
     join event_images ei on ei.id = pa.image_id and ei.world_id = p_world_id
     join live_events le on le.id = ei.event_id and le.status = 'finished'
-      and pa.attempted_at <= ei.unlocks_at + interval '24 hours'
     group by ei.event_id, pa.user_id
   ),
   wins as (
@@ -370,7 +369,6 @@ language sql security definer as $$
     from player_attempts pa
     join event_images ei on ei.id = pa.image_id
     join live_events le on le.id = ei.event_id and le.status = 'finished'
-      and pa.attempted_at <= ei.unlocks_at + interval '24 hours'
     group by ei.event_id, pa.user_id
   ),
   wins as (
@@ -412,7 +410,6 @@ language sql security definer as $$
     p.global_xp::bigint as xp
   from player_attempts pa
   join event_images ei on ei.id = pa.image_id and ei.event_id = p_event_id
-    and pa.attempted_at <= ei.unlocks_at + interval '24 hours'
   join profiles p on p.id = pa.user_id
   group by p.id, p.username, p.global_xp
   order by total_points desc;
