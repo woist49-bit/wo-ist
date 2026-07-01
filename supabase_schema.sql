@@ -451,3 +451,42 @@ create policy "Authenticated users can upload" on storage.objects for insert
   with check (bucket_id = 'game-images' and auth.role() = 'authenticated');
 create policy "Authenticated users can delete own uploads" on storage.objects for delete
   using (bucket_id = 'game-images' and auth.uid()::text = (storage.foldername(name))[1]);
+
+-- =============================================
+-- SCHRITT 6: Live-Events automatisch beenden + Ergebnis-Bestätigung
+-- =============================================
+
+-- Merkt sich, dass ein Spieler das Ergebnis eines beendeten Events bestätigt hat
+-- (dann verschwindet das Ergebnis-Banner auf der Spielwelt-Startseite).
+create table if not exists event_result_ack (
+  user_id uuid not null references profiles(id) on delete cascade,
+  event_id uuid not null references live_events(id) on delete cascade,
+  acked_at timestamptz not null default now(),
+  primary key (user_id, event_id)
+);
+alter table event_result_ack enable row level security;
+create policy "own acks select" on event_result_ack for select using (auth.uid() = user_id);
+create policy "own acks insert" on event_result_ack for insert with check (auth.uid() = user_id);
+
+-- Beendet + archiviert aktive Events, deren letzter Tag UND die 24h-Frist des letzten
+-- Bildes abgelaufen sind. Security-Definer: jedes Mitglied darf es (beim Laden) auslösen.
+create or replace function finish_due_events(p_world_id uuid)
+returns void language plpgsql security definer as $$
+declare
+  ev record;
+  deadline timestamptz;
+begin
+  for ev in select * from live_events where world_id = p_world_id and status = 'active' loop
+    -- Frist = spätestes Bild-Freischalten + 24h, mindestens aber das Event-Enddatum
+    select greatest(coalesce(max(ei.unlocks_at) + interval '24 hours', ev.ends_at), ev.ends_at)
+      into deadline from event_images ei where ei.event_id = ev.id;
+    if now() >= deadline then
+      update live_events set status = 'finished' where id = ev.id;
+      if not exists (select 1 from campaigns where original_event_id = ev.id) then
+        insert into campaigns (world_id, title, original_event_id, is_legacy)
+        values (ev.world_id, ev.title, ev.id, false);
+      end if;
+    end if;
+  end loop;
+end;
+$$;

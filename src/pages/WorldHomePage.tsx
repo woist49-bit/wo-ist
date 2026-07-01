@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Clock } from 'lucide-react'
+import { Clock, Trophy } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useNow } from '../hooks/useNow'
@@ -21,6 +21,9 @@ export function WorldHomePage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [progress, setProgress] = useState<Record<string, Progress>>({})
   const [eventImages, setEventImages] = useState<{ event_id: string | null; unlocks_at: string }[]>([])
+  const [finishedEvent, setFinishedEvent] = useState<LiveEvent | null>(null)
+  const [myResult, setMyResult] = useState<{ rank: number | null; points: number } | null>(null)
+  const [resultDialog, setResultDialog] = useState(false)
   const [showCode, setShowCode] = useState(false)
   const [loading, setLoading] = useState(true)
   const now = useNow(1000)
@@ -28,20 +31,38 @@ export function WorldHomePage() {
   useEffect(() => { if (worldId && user) load() }, [worldId, user])
 
   async function load() {
-    const [worldRes, memberRes, eventsRes, campaignRes, imagesRes] = await Promise.all([
+    // Überfällige Events automatisch beenden + archivieren, bevor der Rest geladen wird
+    await supabase.rpc('finish_due_events', { p_world_id: worldId })
+
+    const [worldRes, memberRes, eventsRes, campaignRes, imagesRes, ackRes] = await Promise.all([
       supabase.from('worlds').select('*').eq('id', worldId).single(),
       supabase.from('world_members').select('*').eq('world_id', worldId).eq('user_id', user!.id).single(),
       supabase.from('live_events').select('*').eq('world_id', worldId).order('starts_at', { ascending: false }),
       supabase.from('campaigns').select('*').eq('world_id', worldId).order('created_at', { ascending: false }),
       supabase.from('event_images').select('*').eq('world_id', worldId),
+      supabase.from('event_result_ack').select('event_id').eq('user_id', user!.id),
     ])
     setWorld(worldRes.data)
     setMembership(memberRes.data)
-    setLiveEvents(eventsRes.data ?? [])
+    const events = (eventsRes.data ?? []) as LiveEvent[]
+    setLiveEvents(events)
     const camps = (campaignRes.data ?? []) as Campaign[]
     setCampaigns(camps)
 
     setEventImages((imagesRes.data ?? []).map(i => ({ event_id: i.event_id, unlocks_at: i.unlocks_at })))
+
+    // Beendetes, noch nicht bestätigtes Event -> Ergebnis-Banner (jüngstes zuerst, da nach starts_at desc sortiert)
+    const ackedIds = new Set((ackRes.data ?? []).map(a => a.event_id))
+    const pending = events.find(e => e.status === 'finished' && !ackedIds.has(e.id)) ?? null
+    setFinishedEvent(pending)
+    if (pending) {
+      const { data: board } = await supabase.rpc('event_leaderboard', { p_event_id: pending.id })
+      const rows = (board ?? []) as { user_id: string; total_points: number }[]
+      const idx = rows.findIndex(r => r.user_id === user!.id)
+      setMyResult(idx >= 0 ? { rank: idx + 1, points: Number(rows[idx].total_points) } : { rank: null, points: 0 })
+    } else {
+      setMyResult(null)
+    }
 
     // Fortschritt pro Kampagne: abgeschlossen = live korrekt gefunden ODER im Kampagnen-Fortschritt gefunden
     const images = (imagesRes.data ?? []) as { id: string; event_id: string | null; campaign_id: string | null }[]
@@ -68,6 +89,13 @@ export function WorldHomePage() {
     if (!confirm('Spielwelt wirklich verlassen?')) return
     await supabase.from('world_members').delete().eq('world_id', worldId).eq('user_id', user!.id)
     navigate('/worlds')
+  }
+
+  async function ackFinishedEvent() {
+    if (!finishedEvent || !user) return
+    await supabase.from('event_result_ack').insert({ user_id: user.id, event_id: finishedEvent.id })
+    setResultDialog(false)
+    setFinishedEvent(null)
   }
 
   if (loading) return <LoadingScreen />
@@ -118,6 +146,19 @@ export function WorldHomePage() {
                 <p className="text-white text-sm font-extrabold mt-3">Jetzt spielen →</p>
               </div>
             </button>
+          ) : finishedEvent ? (
+            <button onClick={() => setResultDialog(true)} className="w-full text-left active:translate-y-[2px] transition-transform">
+              <div className="rounded-[1.5rem] p-5 text-white bg-gradient-to-br from-violet-500 via-indigo-600 to-indigo-800 shadow-[0_6px_0_#312e81,inset_0_2px_0_#ffffff4d]">
+                <span className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide bg-white/25 rounded-full px-2.5 py-1 mb-2">
+                  <Trophy size={13} strokeWidth={2.5} /> Event beendet
+                </span>
+                <p className="text-2xl font-extrabold leading-tight">{finishedEvent.title}</p>
+                <p className="text-white/90 text-sm mt-1 font-semibold">
+                  {myResult?.rank ? `Dein Platz: #${myResult.rank} · ${myResult.points.toLocaleString()} Punkte` : 'Du hast nicht teilgenommen'}
+                </p>
+                <p className="text-white text-sm font-extrabold mt-3">Ergebnis ansehen →</p>
+              </div>
+            </button>
           ) : (
             <div className="rounded-[1.5rem] p-5 text-center bg-white/15 border border-white/25 text-white/80 font-semibold">
               Kein aktives Live-Event
@@ -160,6 +201,24 @@ export function WorldHomePage() {
           </button>
         </div>
       </div>
+
+      {resultDialog && finishedEvent && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-6">
+          <GameCard className="w-full max-w-sm text-center">
+            <Trophy size={40} strokeWidth={2.5} className="text-violet-500 mx-auto mb-2" />
+            <p className="font-extrabold text-slate-800 text-lg mb-1">{finishedEvent.title} beendet</p>
+            <p className="text-slate-600 text-sm mb-4">
+              {myResult?.rank
+                ? <>Du hast <b className="text-slate-800">Platz #{myResult.rank}</b> mit <b className="text-slate-800">{myResult.points.toLocaleString()} Punkten</b> erreicht.</>
+                : 'Du hast an diesem Event nicht teilgenommen.'}
+            </p>
+            <div className="flex flex-col gap-2">
+              <Button variant="secondary" onClick={() => navigate(`/world/${worldId}/event/${finishedEvent.id}`)}>Ganze Rangliste ansehen</Button>
+              <Button variant="success" onClick={ackFinishedEvent}>Bestätigen</Button>
+            </div>
+          </GameCard>
+        </div>
+      )}
     </div>
   )
 }
