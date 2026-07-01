@@ -105,16 +105,15 @@ export function WorldHomePage() {
                 <p className="text-2xl font-extrabold leading-tight">{activeEvent.title}</p>
                 {activeEvent.description && <p className="text-white/90 text-sm mt-1 line-clamp-2">{activeEvent.description}</p>}
 
-                <div className="mt-3 flex flex-col gap-1.5 text-sm font-semibold">
-                  <span className="inline-flex items-center gap-1.5">
-                    <Clock size={15} strokeWidth={2.5} /> Täglich um {formatClock(activeEvent.daily_release_hour, activeEvent.daily_release_minute)} Uhr
-                  </span>
-                  {nextUnlockMs !== null
-                    ? <span className="inline-flex items-center gap-1.5 self-start bg-white/25 rounded-full px-2.5 py-1">⏳ Nächstes Bild in {formatCountdown(nextUnlockMs - now)}</span>
-                    : activeEventUnlocks.length > 0
-                      ? <span className="text-white/85">Alle Bilder freigeschaltet</span>
-                      : null}
-                </div>
+                {nextUnlockMs !== null ? (
+                  <div className="mt-3 inline-flex items-center gap-1.5 bg-white/25 rounded-full px-3 py-1 text-sm font-semibold">
+                    <Clock size={14} strokeWidth={2.5} className="flex-shrink-0" />
+                    <span>Nächstes Bild in {formatCountdown(nextUnlockMs - now)}</span>
+                    <span className="text-white/70 font-normal">· {formatClock(activeEvent.daily_release_hour, activeEvent.daily_release_minute)} Uhr</span>
+                  </div>
+                ) : activeEventUnlocks.length > 0 ? (
+                  <p className="mt-3 text-sm font-semibold text-white/85">Alle Bilder freigeschaltet</p>
+                ) : null}
 
                 <p className="text-white text-sm font-extrabold mt-3">Jetzt spielen →</p>
               </div>
