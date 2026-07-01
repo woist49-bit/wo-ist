@@ -4,6 +4,7 @@ import { AppLayout, WorldLayout } from './components/layout/AppLayout'
 import { ToastProvider } from './stores/toast'
 import { NotificationProvider } from './stores/notifications'
 import { ToastContainer } from './components/ui/ToastContainer'
+import { ThemeColorManager } from './components/ThemeColorManager'
 import { AuthPage } from './pages/AuthPage'
 import { DatenschutzPage } from './pages/DatenschutzPage'
 import { WorldsPage } from './pages/WorldsPage'
@@ -36,6 +37,7 @@ export function App() {
     <ToastProvider>
       <NotificationProvider>
       <BrowserRouter>
+      <ThemeColorManager />
       <Routes>
         <Route path="/" element={user ? <Navigate to="/worlds" replace /> : <AuthPage />} />
         <Route path="/datenschutz" element={<DatenschutzPage />} />

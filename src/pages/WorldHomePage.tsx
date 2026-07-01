@@ -109,7 +109,7 @@ export function WorldHomePage() {
   return (
     <div className="h-full flex flex-col">
       {/* Fixierter, farblich abgesetzter Hero-Bereich: Titel + Beschreibung + Live-Event-Kachel */}
-      <div className="flex-shrink-0 bg-gradient-to-br from-sky-600 to-blue-800 rounded-b-[2rem] shadow-[0_8px_24px_rgba(0,0,0,0.28)] pt-2 pb-5">
+      <div className="flex-shrink-0 bg-gradient-to-b from-sky-600 to-blue-800 rounded-b-[2rem] shadow-[0_8px_24px_rgba(0,0,0,0.28)] pt-2 pb-5">
         <div className="max-w-lg mx-auto px-4">
           <div className="flex items-start justify-between gap-3 mb-4">
             <div className="min-w-0">

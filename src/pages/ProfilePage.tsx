@@ -85,7 +85,7 @@ export function ProfilePage() {
   return (
     <div className="fixed inset-0 z-50 bg-gradient-to-b from-slate-700 via-slate-800 to-slate-900 flex flex-col animate-slide-in-right">
       {/* Fixer Hero-Bereich */}
-      <div className="flex-shrink-0 bg-gradient-to-br from-sky-600 to-blue-800 rounded-b-[2rem] shadow-[0_8px_24px_rgba(0,0,0,0.28)]">
+      <div className="flex-shrink-0 bg-gradient-to-b from-sky-600 to-blue-800 rounded-b-[2rem] shadow-[0_8px_24px_rgba(0,0,0,0.28)]">
         <div className="max-w-lg mx-auto px-4 pb-4">
           <div className="pt-2 pb-1 safe-top">
             <IconButton variant="grey" onClick={() => navigate(-1)} aria-label="Zurück"><ChevronLeft size={24} strokeWidth={2.5} /></IconButton>
