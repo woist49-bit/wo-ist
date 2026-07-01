@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { Clock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
+import { useNow } from '../hooks/useNow'
+import { formatClock, formatCountdown } from '../lib/time'
 import { Button } from '../components/ui/Button'
 import { GameCard } from '../components/ui/GameCard'
 import type { World, LiveEvent, Campaign, WorldMember } from '../types'
@@ -17,8 +20,10 @@ export function WorldHomePage() {
   const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([])
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [progress, setProgress] = useState<Record<string, Progress>>({})
+  const [eventImages, setEventImages] = useState<{ event_id: string | null; unlocks_at: string }[]>([])
   const [showCode, setShowCode] = useState(false)
   const [loading, setLoading] = useState(true)
+  const now = useNow(1000)
 
   useEffect(() => { if (worldId && user) load() }, [worldId, user])
 
@@ -35,6 +40,8 @@ export function WorldHomePage() {
     setLiveEvents(eventsRes.data ?? [])
     const camps = (campaignRes.data ?? []) as Campaign[]
     setCampaigns(camps)
+
+    setEventImages((imagesRes.data ?? []).map(i => ({ event_id: i.event_id, unlocks_at: i.unlocks_at })))
 
     // Fortschritt pro Kampagne: abgeschlossen = live korrekt gefunden ODER im Kampagnen-Fortschritt gefunden
     const images = (imagesRes.data ?? []) as { id: string; event_id: string | null; campaign_id: string | null }[]
@@ -68,6 +75,8 @@ export function WorldHomePage() {
 
   const isAdmin = membership?.role === 'admin'
   const activeEvent = liveEvents.find(e => e.status === 'active')
+  const activeEventUnlocks = activeEvent ? eventImages.filter(i => i.event_id === activeEvent.id).map(i => new Date(i.unlocks_at).getTime()) : []
+  const nextUnlockMs = activeEventUnlocks.filter(t => t > now).sort((a, b) => a - b)[0] ?? null
 
   return (
     <div className="h-full flex flex-col">
@@ -95,6 +104,18 @@ export function WorldHomePage() {
                 </span>
                 <p className="text-2xl font-extrabold leading-tight">{activeEvent.title}</p>
                 {activeEvent.description && <p className="text-white/90 text-sm mt-1 line-clamp-2">{activeEvent.description}</p>}
+
+                <div className="mt-3 flex flex-col gap-1.5 text-sm font-semibold">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Clock size={15} strokeWidth={2.5} /> Täglich um {formatClock(activeEvent.daily_release_hour, activeEvent.daily_release_minute)} Uhr
+                  </span>
+                  {nextUnlockMs !== null
+                    ? <span className="inline-flex items-center gap-1.5 self-start bg-white/25 rounded-full px-2.5 py-1">⏳ Nächstes Bild in {formatCountdown(nextUnlockMs - now)}</span>
+                    : activeEventUnlocks.length > 0
+                      ? <span className="text-white/85">Alle Bilder freigeschaltet</span>
+                      : null}
+                </div>
+
                 <p className="text-white text-sm font-extrabold mt-3">Jetzt spielen →</p>
               </div>
             </button>
