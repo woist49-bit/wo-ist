@@ -8,6 +8,7 @@ import { signOut } from '../stores/auth'
 import { levelFromXp } from '../lib/scoring'
 import { ACHIEVEMENTS } from '../lib/achievements'
 import { Avatar } from '../components/ui/Avatar'
+import { MedalBadge } from '../components/ui/MedalBadge'
 import { Button } from '../components/ui/Button'
 import { GameCard } from '../components/ui/GameCard'
 import { IconButton } from '../components/ui/IconButton'
@@ -157,11 +158,10 @@ export function ProfilePage() {
             <div className="flex flex-col gap-2">
               {ACHIEVEMENTS.map(a => {
                 const got = unlocked.has(a.key)
-                const medal = a.tier === 'gold' ? '🥇' : a.tier === 'silver' ? '🥈' : '🥉'
                 return (
                   <GameCard key={a.key} className={got ? '' : 'opacity-55'}>
-                    <div className="flex items-start gap-3">
-                      <div className="text-2xl flex-shrink-0 w-7 text-center">{got ? medal : '🔒'}</div>
+                    <div className="flex items-center gap-3">
+                      <MedalBadge tier={a.tier} locked={!got} size={40} />
                       <div className="flex-1 min-w-0">
                         <p className="font-extrabold text-slate-800">{a.name}</p>
                         <p className="text-xs text-slate-500 mt-0.5">{a.description}</p>

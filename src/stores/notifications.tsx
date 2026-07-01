@@ -1,10 +1,10 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 import confetti from 'canvas-confetti'
-import { Medal } from 'lucide-react'
 import { ACHIEVEMENT_MAP } from '../lib/achievements'
 import { xpForNextLevel } from '../lib/scoring'
 import { Button } from '../components/ui/Button'
 import { GameCard } from '../components/ui/GameCard'
+import { MedalBadge } from '../components/ui/MedalBadge'
 
 interface Banner { key: string; id: number }
 interface LevelUp { newLevel: number; xpForNext: number; id: number }
@@ -123,7 +123,7 @@ function AchievementBanner({ achievementKey, onDismiss }: { achievementKey: stri
         className="bg-[#fdf6e3] border-[3px] rounded-2xl shadow-[0_5px_0_#0000001f] px-4 py-3 flex items-center gap-3"
         style={{ borderColor: tier.border }}
       >
-        <Medal size={30} strokeWidth={2.5} className={`flex-shrink-0 ${tier.icon}`} />
+        <MedalBadge tier={a.tier} size={42} />
         <div className="flex-1 min-w-0">
           <p className="font-extrabold text-slate-800 truncate">{a.name}</p>
           <p className="text-xs text-slate-500">Achievement freigeschaltet</p>
