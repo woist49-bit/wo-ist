@@ -6,9 +6,8 @@ import { xpForNextLevel } from '../lib/scoring'
 import { Button } from '../components/ui/Button'
 import { GameCard } from '../components/ui/GameCard'
 
-type Item =
-  | { kind: 'achievement'; key: string; id: number }
-  | { kind: 'levelup'; newLevel: number; xpForNext: number; id: number }
+interface Banner { key: string; id: number }
+interface LevelUp { newLevel: number; xpForNext: number; id: number }
 
 interface Ctx {
   triggerAchievement: (key: string) => void
@@ -26,50 +25,50 @@ export function useNotifications(): Ctx {
 let nextId = 1
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
-  const [queue, setQueue] = useState<Item[]>([])
-  const [current, setCurrent] = useState<Item | null>(null)
-  const [bannerPhase, setBannerPhase] = useState<'in' | 'out'>('in')
+  const [banners, setBanners] = useState<Banner[]>([])
+  const [levelUp, setLevelUp] = useState<LevelUp | null>(null)
+  const [levelUpQueue, setLevelUpQueue] = useState<LevelUp[]>([])
 
   const triggerAchievement = useCallback((key: string) => {
-    setQueue(q => [...q, { kind: 'achievement', key, id: nextId++ }])
+    setBanners(b => [...b, { key, id: nextId++ }])
   }, [])
   const triggerLevelUp = useCallback((newLevel: number, xpForNext: number) => {
-    setQueue(q => [...q, { kind: 'levelup', newLevel, xpForNext, id: nextId++ }])
+    setLevelUpQueue(q => [...q, { newLevel, xpForNext, id: nextId++ }])
   }, [])
 
-  // Nächstes Element auswählen, sobald gerade nichts angezeigt wird.
-  // Achievements werden vor Level-Up-Overlays bevorzugt.
-  useEffect(() => {
-    if (current || queue.length === 0) return
-    const achIdx = queue.findIndex(i => i.kind === 'achievement')
-    const idx = achIdx >= 0 ? achIdx : 0
-    const next = queue[idx]
-    setQueue(q => q.filter(i => i.id !== next.id))
-    setCurrent(next)
-  }, [current, queue])
+  const dismissBanner = useCallback((id: number) => {
+    setBanners(b => b.filter(x => x.id !== id))
+  }, [])
 
-  // Achievement-Banner: rein, 4s stehen, raus, dann freigeben (mit kleinem Abstand)
+  // Level-Up-Overlay erst zeigen, wenn keine Banner mehr da sind (erst Banner, dann Overlay)
   useEffect(() => {
-    if (!current || current.kind !== 'achievement') return
-    setBannerPhase('in')
-    const tOut = setTimeout(() => setBannerPhase('out'), 4000)
-    const tClear = setTimeout(() => setCurrent(null), 4000 + 550)
-    return () => { clearTimeout(tOut); clearTimeout(tClear) }
-  }, [current])
+    if (levelUp || banners.length > 0 || levelUpQueue.length === 0) return
+    setLevelUp(levelUpQueue[0])
+    setLevelUpQueue(q => q.slice(1))
+  }, [levelUp, banners, levelUpQueue])
 
   // Konfetti beim Level-Up
   useEffect(() => {
-    if (current?.kind === 'levelup') fireConfetti()
-  }, [current])
+    if (levelUp) fireConfetti()
+  }, [levelUp])
 
   return (
     <NotificationContext.Provider value={{ triggerAchievement, triggerLevelUp }}>
       {children}
-      {current?.kind === 'achievement' && (
-        <AchievementBanner key={current.id} achievementKey={current.key} phase={bannerPhase} />
+
+      {banners.length > 0 && (
+        <div
+          className="fixed left-0 right-0 z-[60] px-3 flex flex-col items-center gap-2 pointer-events-none"
+          style={{ top: 'calc(env(safe-area-inset-top) + 4.5rem)' }}
+        >
+          {banners.map(b => (
+            <AchievementBanner key={b.id} achievementKey={b.key} onDismiss={() => dismissBanner(b.id)} />
+          ))}
+        </div>
       )}
-      {current?.kind === 'levelup' && (
-        <LevelUpOverlay newLevel={current.newLevel} xpForNext={current.xpForNext} onClose={() => setCurrent(null)} />
+
+      {levelUp && (
+        <LevelUpOverlay newLevel={levelUp.newLevel} xpForNext={levelUp.xpForNext} onClose={() => setLevelUp(null)} />
       )}
     </NotificationContext.Provider>
   )
@@ -77,7 +76,6 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
 function fireConfetti() {
   const colors = ['#7c3aed', '#22c55e', '#0ea5e9', '#f59e0b', '#f43f5e']
-  // Vom oberen Rand nach unten "regnen"
   confetti({ particleCount: 90, angle: 270, spread: 60, startVelocity: 30, gravity: 1, ticks: 250, origin: { x: 0.5, y: 0 }, colors })
   confetti({ particleCount: 60, angle: 250, spread: 50, startVelocity: 35, gravity: 1, ticks: 250, origin: { x: 0.1, y: 0 }, colors })
   confetti({ particleCount: 60, angle: 290, spread: 50, startVelocity: 35, gravity: 1, ticks: 250, origin: { x: 0.9, y: 0 }, colors })
@@ -89,29 +87,40 @@ const TIER = {
   bronze: { border: '#b45309', icon: 'text-amber-700' },
 }
 
-function AchievementBanner({ achievementKey, phase }: { achievementKey: string; phase: 'in' | 'out' }) {
+function AchievementBanner({ achievementKey, onDismiss }: { achievementKey: string; onDismiss: () => void }) {
   const [entered, setEntered] = useState(false)
+  const [leaving, setLeaving] = useState(false)
+
   useEffect(() => {
     const r = requestAnimationFrame(() => setEntered(true))
-    return () => cancelAnimationFrame(r)
+    const auto = setTimeout(() => setLeaving(true), 4000) // automatisch nach 4s ausblenden
+    return () => { cancelAnimationFrame(r); clearTimeout(auto) }
   }, [])
+
+  // Ausblende-Animation abwarten, dann entfernen
+  useEffect(() => {
+    if (!leaving) return
+    const t = setTimeout(onDismiss, 350)
+    return () => clearTimeout(t)
+  }, [leaving, onDismiss])
 
   const a = ACHIEVEMENT_MAP[achievementKey]
   if (!a) return null
   const tier = TIER[a.tier as keyof typeof TIER] ?? TIER.bronze
-  const visible = entered && phase === 'in'
+  const shown = entered && !leaving
 
   return (
-    <div
-      className="fixed left-0 right-0 z-[60] px-3 flex justify-center pointer-events-none"
+    <button
+      onClick={() => setLeaving(true)}
+      className="w-full max-w-md pointer-events-auto text-left"
       style={{
-        top: 'calc(env(safe-area-inset-top) + 4.5rem)',
-        transform: visible ? 'translateY(0)' : 'translateY(-240%)',
-        transition: 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)',
+        transform: shown ? 'translateY(0)' : 'translateY(-30%)',
+        opacity: shown ? 1 : 0,
+        transition: 'transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease-out',
       }}
     >
       <div
-        className="w-full max-w-md bg-[#fdf6e3] border-[3px] rounded-2xl shadow-[0_5px_0_#0000001f] px-4 py-3 flex items-center gap-3"
+        className="bg-[#fdf6e3] border-[3px] rounded-2xl shadow-[0_5px_0_#0000001f] px-4 py-3 flex items-center gap-3"
         style={{ borderColor: tier.border }}
       >
         <Medal size={30} strokeWidth={2.5} className={`flex-shrink-0 ${tier.icon}`} />
@@ -121,7 +130,7 @@ function AchievementBanner({ achievementKey, phase }: { achievementKey: string; 
         </div>
         <p className="font-extrabold text-green-600 flex-shrink-0">+{a.xp_reward} XP</p>
       </div>
-    </div>
+    </button>
   )
 }
 
