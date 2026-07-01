@@ -3,7 +3,7 @@ export function calcPoints(seconds: number): number {
 }
 
 export function xpForNextLevel(currentLevel: number): number {
-  return Math.round(500 * Math.pow(currentLevel, 1.3))
+  return Math.round(300 * Math.pow(currentLevel, 1.2))
 }
 
 export function totalXpForLevel(level: number): number {
