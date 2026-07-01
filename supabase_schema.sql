@@ -13,11 +13,15 @@ create table profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   username text unique not null,
   username_key text,
+  avatar_url text,
   global_xp integer not null default 0,
   global_level integer not null default 1,
   global_wins integer not null default 0,
   created_at timestamptz not null default now()
 );
+
+-- Profilbild: öffentliche URL im bestehenden Bucket "game-images" (Ordner avatars/<uid>/)
+alter table profiles add column if not exists avatar_url text;
 
 -- Normalisierter Benutzername (getrimmt, einfache Leerzeichen, kleingeschrieben) für Eindeutigkeit/Login
 alter table profiles add column if not exists username_key text;

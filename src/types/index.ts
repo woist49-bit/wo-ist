@@ -5,6 +5,7 @@ export interface Profile {
   global_xp: number
   global_level: number
   global_wins: number
+  avatar_url: string | null
 }
 
 export interface World {

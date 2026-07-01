@@ -4,6 +4,7 @@ import { BadgeCheck, MoreVertical } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { levelFromXp } from '../../lib/scoring'
+import { Avatar } from '../../components/ui/Avatar'
 import { Button } from '../../components/ui/Button'
 import { GameCard } from '../../components/ui/GameCard'
 import { Input } from '../../components/ui/Input'
@@ -233,13 +234,16 @@ export function AdminPage() {
               return (
                 <GameCard key={m.user_id}>
                   <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <p className="font-extrabold text-slate-800 truncate">{m.profile?.username}</p>
-                        {m.certified && <BadgeCheck size={16} className="text-sky-500 flex-shrink-0" aria-label="Zertifiziert" />}
-                        {isMe && <span className="text-xs text-slate-400 flex-shrink-0">(Du)</span>}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Avatar url={m.profile?.avatar_url} name={m.profile?.username} className="w-11 h-11 rounded-xl text-base shadow-[inset_0_2px_0_#ffffff33]" />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-extrabold text-slate-800 truncate">{m.profile?.username}</p>
+                          {m.certified && <BadgeCheck size={16} className="text-sky-500 flex-shrink-0" aria-label="Zertifiziert" />}
+                          {isMe && <span className="text-xs text-slate-400 flex-shrink-0">(Du)</span>}
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">Level {lvl} · {m.role === 'admin' ? '👑 Admin' : 'Spieler'}</p>
                       </div>
-                      <p className="text-xs text-slate-500 mt-0.5">Level {lvl} · {m.role === 'admin' ? '👑 Admin' : 'Spieler'}</p>
                     </div>
                     <button
                       onClick={() => setMenuOpen(menuOpen === m.user_id ? null : m.user_id)}

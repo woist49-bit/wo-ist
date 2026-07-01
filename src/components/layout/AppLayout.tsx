@@ -17,10 +17,12 @@ function ProfileButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="w-12 h-12 rounded-2xl bg-violet-500 text-white font-bold text-lg flex items-center justify-center shadow-[0_3px_0_#5b21b6,inset_0_2px_0_#ffffff4d] active:translate-y-[2px] active:shadow-[0_1px_0_#5b21b6,inset_0_2px_0_#ffffff4d] transition-all duration-100 touch-manipulation select-none"
+      className="relative w-12 h-12 rounded-2xl overflow-hidden bg-violet-500 text-white font-bold text-lg flex items-center justify-center shadow-[0_3px_0_#5b21b6,inset_0_2px_0_#ffffff4d] active:translate-y-[2px] active:shadow-[0_1px_0_#5b21b6,inset_0_2px_0_#ffffff4d] transition-all duration-100 touch-manipulation select-none"
       aria-label="Profil"
     >
-      {initial || <UserCircle size={24} />}
+      {profile?.avatar_url
+        ? <img src={profile.avatar_url} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover" />
+        : (initial || <UserCircle size={24} />)}
     </button>
   )
 }

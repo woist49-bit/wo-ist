@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, type ChangeEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, Camera } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
+import { useToast } from '../stores/toast'
 import { signOut } from '../stores/auth'
 import { levelFromXp } from '../lib/scoring'
 import { ACHIEVEMENTS } from '../lib/achievements'
+import { Avatar } from '../components/ui/Avatar'
 import { Button } from '../components/ui/Button'
 import { GameCard } from '../components/ui/GameCard'
 import { IconButton } from '../components/ui/IconButton'
@@ -13,7 +15,8 @@ import type { Profile } from '../types'
 
 export function ProfilePage() {
   const { userId } = useParams<{ userId: string }>()
-  const { user } = useAuth()
+  const { user, refreshProfile } = useAuth()
+  const { addToast } = useToast()
   const navigate = useNavigate()
   const targetId = userId ?? user?.id
   const isOwn = !!targetId && targetId === user?.id
@@ -24,6 +27,8 @@ export function ProfilePage() {
   const [wins, setWins] = useState(0)
   const [unlocked, setUnlocked] = useState<Set<string>>(new Set())
   const [attempts, setAttempts] = useState({ total: 0, finds: 0 })
+  const [uploading, setUploading] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!targetId) return
@@ -48,11 +53,33 @@ export function ProfilePage() {
     return () => { active = false }
   }, [targetId])
 
+  async function onAvatarChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // zurücksetzen, damit dieselbe Datei erneut gewählt werden kann
+    if (!file || !user) return
+    if (!file.type.startsWith('image/')) { addToast('Bitte wähle eine Bilddatei.', 'error'); return }
+    if (file.size > 5 * 1024 * 1024) { addToast('Das Bild ist zu groß. Maximale Größe ist 5 MB.', 'error'); return }
+
+    setUploading(true)
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+    const path = `avatars/${user.id}/${Date.now()}.${ext}`
+    const { error: upErr } = await supabase.storage.from('game-images').upload(path, file, { upsert: true })
+    if (upErr) { setUploading(false); addToast('Upload fehlgeschlagen.', 'error'); return }
+
+    const url = supabase.storage.from('game-images').getPublicUrl(path).data.publicUrl
+    const { error: dbErr } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', user.id)
+    setUploading(false)
+    if (dbErr) { addToast('Speichern fehlgeschlagen.', 'error'); return }
+
+    setProfile(p => p ? { ...p, avatar_url: url } : p)
+    refreshProfile() // Header & Co. aktualisieren
+    addToast('Profilbild aktualisiert.', 'success')
+  }
+
   if (!profile) return null
 
   const { level, xpIntoLevel, xpNeeded } = levelFromXp(profile.global_xp)
   const progress = Math.min(100, Math.round((xpIntoLevel / xpNeeded) * 100))
-  const initial = profile.username.slice(0, 1).toUpperCase()
   const hitRate = attempts.total ? Math.round((attempts.finds / attempts.total) * 100) : 0
 
   return (
@@ -65,9 +92,24 @@ export function ProfilePage() {
           </div>
 
           <div className="flex items-center gap-4 mb-4 mt-1">
-            <div className="w-16 h-16 rounded-2xl bg-violet-500 text-white text-2xl font-extrabold flex items-center justify-center shadow-[0_3px_0_#5b21b6,inset_0_2px_0_#ffffff4d] flex-shrink-0">
-              {initial}
-            </div>
+            {isOwn ? (
+              <button
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+                className="relative flex-shrink-0"
+                aria-label="Profilbild ändern"
+              >
+                <Avatar url={profile.avatar_url} name={profile.username} className="w-16 h-16 rounded-2xl text-2xl shadow-[0_3px_0_#5b21b6,inset_0_2px_0_#ffffff4d]" />
+                <span className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-white text-slate-700 flex items-center justify-center shadow-[0_2px_4px_rgba(0,0,0,0.3)]">
+                  {uploading
+                    ? <span className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+                    : <Camera size={15} strokeWidth={2.5} />}
+                </span>
+                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onAvatarChange} />
+              </button>
+            ) : (
+              <Avatar url={profile.avatar_url} name={profile.username} className="w-16 h-16 rounded-2xl text-2xl shadow-[0_3px_0_#5b21b6,inset_0_2px_0_#ffffff4d]" />
+            )}
             <div className="min-w-0">
               <p className="text-xl font-extrabold text-white truncate">{profile.username}</p>
               <p className="text-sky-100 font-bold text-sm">Level {level}</p>
