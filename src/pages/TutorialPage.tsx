@@ -4,6 +4,7 @@ import { ChevronLeft, PartyPopper } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useNotifications } from '../stores/notifications'
+import { isHit } from '../lib/scoring'
 import { TUTORIAL_SLIDES, TUTORIAL_IMAGES, TUTORIAL_ACHIEVEMENT_KEY, type TutorialImage } from '../lib/tutorial'
 import { Button } from '../components/ui/Button'
 import { GameCard } from '../components/ui/GameCard'
@@ -116,18 +117,19 @@ function TutorialImageStep({ image, isLast, onNext, onBack }: {
   const [revealed, setRevealed] = useState(false)
 
   const t = image.target
-  const hit = !!tip && nat.w > 0 &&
-    Math.hypot((tip.x - t.x_rel) * nat.w, (tip.y - t.y_rel) * nat.h) <= t.radius_px
+  // Trefferradius als Pixel (Bruchteil der kürzeren Seite) – identisch zum echten Spiel
+  const radiusPx = nat.w > 0 ? t.radius_rel * Math.min(nat.w, nat.h) : 0
+  const hit = !!tip && nat.w > 0 && isHit(tip.x, tip.y, t.x_rel, t.y_rel, t.radius_rel, nat.w, nat.h)
   const canPlace = !image.guided && !revealed
 
   const markers: ViewerMarker[] = []
   if (image.guided) {
     // Ziel von Anfang an sichtbar (pulsierender Kreis)
-    markers.push({ x_rel: t.x_rel, y_rel: t.y_rel, radius_px: t.radius_px, variant: 'ring', color: '#22c55e', pulse: true })
+    markers.push({ x_rel: t.x_rel, y_rel: t.y_rel, radius_px: radiusPx, variant: 'ring', color: '#22c55e', pulse: true })
   } else {
     if (!revealed && tip) markers.push({ x_rel: tip.x, y_rel: tip.y, variant: 'pin', color: '#818cf8' })
     if (revealed) {
-      markers.push({ x_rel: t.x_rel, y_rel: t.y_rel, radius_px: t.radius_px, variant: 'ring', color: hit ? '#22c55e' : '#eab308', pulse: true })
+      markers.push({ x_rel: t.x_rel, y_rel: t.y_rel, radius_px: radiusPx, variant: 'ring', color: hit ? '#22c55e' : '#eab308', pulse: true })
       if (tip) markers.push({ x_rel: tip.x, y_rel: tip.y, variant: 'pin', color: hit ? '#22c55e' : '#ef4444' })
     }
   }

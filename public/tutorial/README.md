@@ -14,11 +14,12 @@ Die Bilder werden unter `/tutorial/tutorial_X.png` geladen (Vite serviert `publi
 Die festen Ziel-Marker liegen in `src/lib/tutorial.ts` in `TUTORIAL_IMAGES`:
 
 ```ts
-target: { x_rel: 0.5, y_rel: 0.5, radius_px: 70 }
+target: { x_rel: 0.59, y_rel: 0.86, radius_rel: 0.171 }
 ```
 
 - `x_rel`, `y_rel`: Position 0..1 der **natürlichen** Bildgröße (0/0 = oben links, 1/1 = unten rechts)
-- `radius_px`: Trefferradius in **natürlichen Bildpixeln** – exakt wie im restlichen Markierungs-System
+- `radius_rel`: Trefferradius als Bruchteil der **kürzeren Bildseite** (0..1) – exakt wie
+  `target_radius` im restlichen Markierungs-System
 
 Nach dem Einfügen der echten Bilder die Werte je Bild an die tatsächliche Position
 der versteckten Person anpassen (v. a. für Bild 3 und 4 relevant, wo selbst gesucht wird).
