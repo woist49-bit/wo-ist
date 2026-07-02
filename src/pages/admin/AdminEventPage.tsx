@@ -31,7 +31,7 @@ export function AdminEventPage() {
   async function load() {
     const [evRes, imgRes] = await Promise.all([
       supabase.from('live_events').select('*').eq('id', eventId).single(),
-      supabase.from('event_images').select('*').eq('event_id', eventId).order('sort_order'),
+      supabase.from('event_images').select('*').eq('event_id', eventId).order('unlocks_at', { ascending: true }).order('sort_order', { ascending: true }),
     ])
     setEvent(evRes.data)
     setImages(imgRes.data ?? [])

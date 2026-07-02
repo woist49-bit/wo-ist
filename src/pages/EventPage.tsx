@@ -25,7 +25,7 @@ export function EventPage() {
   async function load() {
     const [evRes, imgRes, attRes, boardRes] = await Promise.all([
       supabase.from('live_events').select('*').eq('id', eventId).single(),
-      supabase.from('event_images').select('*').eq('event_id', eventId).order('sort_order'),
+      supabase.from('event_images').select('*').eq('event_id', eventId).order('unlocks_at', { ascending: true }).order('sort_order', { ascending: true }),
       supabase.from('player_attempts').select('*').eq('user_id', user!.id).in('image_id',
         (await supabase.from('event_images').select('id').eq('event_id', eventId)).data?.map(r => r.id) ?? []
       ),
