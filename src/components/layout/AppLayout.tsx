@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useParams, useLocation } from 'react-router-dom'
-import { ChevronLeft, UserCircle, Home, MessageCircle, Trophy } from 'lucide-react'
+import { ChevronLeft, UserCircle, Home, MessageCircle, Trophy, Gem } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../stores/toast'
@@ -27,6 +27,23 @@ function ProfileButton({ onClick }: { onClick: () => void }) {
   )
 }
 
+// Gem-Anzeige neben dem Profil-Button. Tippen öffnet den Shop. Zahl kommt aus dem
+// zentralen Auth-Zustand -> aktualisiert sich, sobald Gems verdient/ausgegeben werden.
+function GemButton() {
+  const { profile } = useAuth()
+  const navigate = useNavigate()
+  return (
+    <button
+      onClick={() => navigate('/shop')}
+      className="flex items-center gap-1.5 h-12 bg-black/20 rounded-full pl-3 pr-3.5 active:translate-y-[1px] transition-transform touch-manipulation select-none"
+      aria-label="Shop"
+    >
+      <Gem size={19} strokeWidth={2.5} className="text-cyan-300" />
+      <span className="text-white font-extrabold tabular-nums">{profile?.gems ?? 0}</span>
+    </button>
+  )
+}
+
 // onBack optional: ohne Back-Button (Hauptmenü) bleibt links ein Platzhalter, damit Profil rechts steht.
 // bg optional: auf der Welt-Startseite die Hero-Farbe, damit oben alles ein zusammenhängender Block ist.
 function HeaderBar({ onBack, onProfile, bg = '' }: { onBack?: () => void; onProfile: () => void; bg?: string }) {
@@ -35,7 +52,10 @@ function HeaderBar({ onBack, onProfile, bg = '' }: { onBack?: () => void; onProf
       {onBack
         ? <IconButton variant="grey" onClick={onBack} aria-label="Zurück"><ChevronLeft size={24} strokeWidth={2.5} /></IconButton>
         : <div className="w-12" />}
-      <ProfileButton onClick={onProfile} />
+      <div className="flex items-center gap-2">
+        <GemButton />
+        <ProfileButton onClick={onProfile} />
+      </div>
     </header>
   )
 }

@@ -8,6 +8,7 @@ import { ThemeColorManager } from './components/ThemeColorManager'
 import { AuthPage } from './pages/AuthPage'
 import { DatenschutzPage } from './pages/DatenschutzPage'
 import { TutorialPage } from './pages/TutorialPage'
+import { ShopPage } from './pages/ShopPage'
 import { WorldsPage } from './pages/WorldsPage'
 import { WorldHomePage } from './pages/WorldHomePage'
 import { EventPage } from './pages/EventPage'
@@ -43,6 +44,7 @@ export function App() {
         <Route path="/" element={user ? <Navigate to="/worlds" replace /> : <AuthPage />} />
         <Route path="/datenschutz" element={<DatenschutzPage />} />
         <Route path="/tutorial" element={user ? <TutorialPage /> : <Navigate to="/" replace />} />
+        <Route path="/shop" element={user ? <ShopPage /> : <Navigate to="/" replace />} />
         <Route element={<AppLayout />}>
           <Route path="/worlds" element={user ? <WorldsPage /> : <Navigate to="/" replace />} />
           <Route path="/leaderboard" element={user ? <LeaderboardPage /> : <Navigate to="/" replace />} />

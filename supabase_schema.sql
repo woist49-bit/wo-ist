@@ -262,8 +262,22 @@ create policy "System can insert achievements" on player_achievements for insert
 
 create or replace function add_xp(p_user_id uuid, p_xp integer, p_world_id uuid)
 returns void language plpgsql security definer as $$
+declare
+  v_old integer;
+  v_old_level integer;
+  v_new_level integer;
+  lvl integer;
 begin
+  select global_xp into v_old from profiles where id = p_user_id;
   update profiles set global_xp = global_xp + p_xp where id = p_user_id;
+  -- Gems: 15 pro neu erreichtem Level (idempotent via award_gems)
+  v_old_level := level_from_xp(v_old);
+  v_new_level := level_from_xp(v_old + p_xp);
+  if v_new_level > v_old_level then
+    for lvl in (v_old_level + 1) .. v_new_level loop
+      perform award_gems(p_user_id, 15, 'level_up', 'level_' || lvl);
+    end loop;
+  end if;
 end;
 $$;
 
@@ -276,6 +290,12 @@ declare
     "eagle_eye": 500, "no_miss": 500, "patient_finder": 400, "streak_5": 600,
     "first_win": 1500, "perfect_event": 2500, "campaign_king": 1200, "last_minute": 1000
   }'::jsonb;
+  -- Gems je Tier: Bronze 10, Silber 25, Gold 50
+  gem_rewards jsonb := '{
+    "first_find": 10, "first_event": 10, "legacy_first": 10, "near_miss": 10,
+    "eagle_eye": 25, "no_miss": 25, "patient_finder": 25, "streak_5": 25,
+    "first_win": 50, "perfect_event": 50, "campaign_king": 50, "last_minute": 50
+  }'::jsonb;
   xp integer;
 begin
   insert into player_achievements (user_id, world_id, achievement_key)
@@ -287,6 +307,7 @@ begin
     if xp is not null then
       perform add_xp(p_user_id, xp, p_world_id);
     end if;
+    perform award_gems(p_user_id, coalesce((gem_rewards ->> p_key)::integer, 0), 'achievement', p_key);
     return true;
   end if;
   return false;
@@ -510,8 +531,105 @@ begin
     insert into player_achievements (user_id, world_id, achievement_key)
     values (p_user_id, null, 'tutorial_master');
     perform add_xp(p_user_id, 150, null);
+    perform award_gems(p_user_id, 10, 'achievement', 'tutorial_master'); -- Bronze
     return true;
   end if;
   return false;
+end;
+$$;
+
+-- =============================================
+-- SCHRITT 8: Gems (Währung) – Phase 1
+-- Gems sind knapp und nur durch Spielen verdienbar. Alle Vergaben laufen
+-- serverseitig + idempotent über ein Ledger; das Frontend schreibt nie direkt.
+-- =============================================
+
+alter table profiles add column if not exists gems integer not null default 0;
+
+-- Ledger: macht jede Gem-Vergabe eindeutig (idempotent) und nachvollziehbar
+create table if not exists gem_transactions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  amount integer not null,
+  reason text not null,
+  ref_key text not null,
+  created_at timestamptz not null default now(),
+  unique (user_id, reason, ref_key)
+);
+alter table gem_transactions enable row level security;
+create policy "own gem transactions" on gem_transactions for select using (auth.uid() = user_id);
+
+-- Zentrale, idempotente Gem-Vergabe. NICHT direkt vom Frontend aufrufbar (revoke unten) –
+-- nur die validierenden Security-Definer-Funktionen dürfen sie (als Owner) aufrufen.
+create or replace function award_gems(p_user_id uuid, p_amount integer, p_reason text, p_ref_key text)
+returns integer language plpgsql security definer as $$
+begin
+  if p_amount <= 0 then return 0; end if;
+  insert into gem_transactions (user_id, amount, reason, ref_key)
+  values (p_user_id, p_amount, p_reason, p_ref_key)
+  on conflict (user_id, reason, ref_key) do nothing;
+  if not found then return 0; end if; -- schon vergeben -> nichts tun
+  update profiles set gems = gems + p_amount where id = p_user_id;
+  return p_amount;
+end;
+$$;
+revoke execute on function award_gems(uuid, integer, text, text) from public, anon, authenticated;
+
+-- Level aus XP – gleiche Formel wie im Frontend: round(300 * level^1.2)
+create or replace function level_from_xp(p_xp integer)
+returns integer language plpgsql immutable as $$
+declare
+  lvl integer := 1;
+  remaining integer := p_xp;
+  needed integer;
+begin
+  loop
+    needed := round(300 * power(lvl, 1.2));
+    if remaining < needed then return lvl; end if;
+    remaining := remaining - needed;
+    lvl := lvl + 1;
+  end loop;
+end;
+$$;
+
+-- 5 Gems für einen korrekten Live-Event-Treffer (nur wenn wirklich getroffen; einmal pro Bild)
+create or replace function award_find_gems(p_user_id uuid, p_image_id uuid)
+returns integer language plpgsql security definer as $$
+begin
+  if not exists (
+    select 1 from player_attempts
+    where user_id = p_user_id and image_id = p_image_id and is_correct
+  ) then
+    return 0;
+  end if;
+  return award_gems(p_user_id, 5, 'find', p_image_id::text);
+end;
+$$;
+
+-- 20 Gems wenn eine Kampagne KOMPLETT abgeschlossen ist (einmal pro Kampagne, nicht beim Wiederholen)
+create or replace function award_campaign_gems(p_user_id uuid, p_campaign_id uuid)
+returns integer language plpgsql security definer as $$
+declare
+  v_event uuid;
+  v_total integer;
+  v_done integer;
+begin
+  select original_event_id into v_event from campaigns where id = p_campaign_id;
+  with imgs as (
+    select ei.id from event_images ei
+    where (v_event is not null and ei.event_id = v_event)
+       or (v_event is null and ei.campaign_id = p_campaign_id)
+  ),
+  done as (
+    select i.id from imgs i
+    where exists (select 1 from campaign_progress cp
+                  where cp.campaign_id = p_campaign_id and cp.image_id = i.id
+                    and cp.user_id = p_user_id and cp.found)
+       or exists (select 1 from player_attempts pa
+                  where pa.image_id = i.id and pa.user_id = p_user_id and pa.is_correct)
+  )
+  select (select count(*) from imgs), (select count(*) from done) into v_total, v_done;
+  if v_total = 0 or v_done < v_total then return 0; end if;
+  return award_gems(p_user_id, 20, 'campaign', p_campaign_id::text);
 end;
 $$;

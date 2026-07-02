@@ -13,7 +13,7 @@ import type { EventImage, PlayerAttempt } from '../types'
 
 export function ImageGamePage() {
   const { worldId, imageId, campaignId } = useParams<{ worldId: string; imageId: string; campaignId: string }>()
-  const { user } = useAuth()
+  const { user, refreshProfile } = useAuth()
   const { triggerAchievement, triggerLevelUp } = useNotifications()
   const navigate = useNavigate()
   const isCampaign = !!campaignId
@@ -85,9 +85,8 @@ export function ImageGamePage() {
           world_id: worldId, found: true, points: awarded,
         }, { onConflict: 'campaign_id,image_id,user_id' })
         setCampaignFound(true)
-        if (awarded > 0) {
-          await awardAndNotify(awarded, seconds, dist, true)
-        }
+        // Immer aufrufen (auch bei 0 Punkten), damit die Kampagnen-Abschluss-Gems geprüft werden
+        await awardAndNotify(awarded, seconds, dist, true)
       }
       setLastHit(hit); setLastPoints(awarded); setRevealed(true); setSubmitting(false)
       return
@@ -151,11 +150,22 @@ export function ImageGamePage() {
       if (isNew) triggerAchievement(key)
     }
 
+    // Gems serverseitig + idempotent: Live-Fund (5) bzw. komplett abgeschlossene Kampagne (20)
+    if (image) {
+      if (isCampaign && campaignId) {
+        await supabase.rpc('award_campaign_gems', { p_user_id: user.id, p_campaign_id: campaignId })
+      } else if (hit) {
+        await supabase.rpc('award_find_gems', { p_user_id: user.id, p_image_id: image.id })
+      }
+    }
+
     const { data: after } = await supabase.from('profiles').select('global_xp').eq('id', user.id).single()
     const newXp = after?.global_xp ?? oldXp
     const oldLevel = levelFromXp(oldXp).level
     const nl = levelFromXp(newXp)
     if (nl.level > oldLevel) triggerLevelUp(nl.level, nl.xpNeeded - nl.xpIntoLevel)
+
+    refreshProfile() // Header: Gems (und ggf. Level) live aktualisieren
   }
 
   if (loading) return <LoadingScreen />

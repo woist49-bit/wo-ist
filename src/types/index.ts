@@ -7,6 +7,7 @@ export interface Profile {
   global_wins: number
   avatar_url: string | null
   tutorial_completed: boolean
+  gems: number
 }
 
 export interface World {
