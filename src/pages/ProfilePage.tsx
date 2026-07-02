@@ -100,7 +100,7 @@ export function ProfilePage() {
                 className="relative flex-shrink-0"
                 aria-label="Profilbild ändern"
               >
-                <Avatar url={profile.avatar_url} name={profile.username} className="w-16 h-16 rounded-2xl text-2xl shadow-[0_3px_0_#5b21b6,inset_0_2px_0_#ffffff4d]" />
+                <Avatar url={profile.avatar_url} name={profile.username} className="w-16 h-16 rounded-full text-2xl shadow-[0_3px_0_#5b21b6,inset_0_2px_0_#ffffff4d]" />
                 <span className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-white text-slate-700 flex items-center justify-center shadow-[0_2px_4px_rgba(0,0,0,0.3)]">
                   {uploading
                     ? <span className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
@@ -109,7 +109,7 @@ export function ProfilePage() {
                 <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onAvatarChange} />
               </button>
             ) : (
-              <Avatar url={profile.avatar_url} name={profile.username} className="w-16 h-16 rounded-2xl text-2xl shadow-[0_3px_0_#5b21b6,inset_0_2px_0_#ffffff4d]" />
+              <Avatar url={profile.avatar_url} name={profile.username} className="w-16 h-16 rounded-full text-2xl shadow-[0_3px_0_#5b21b6,inset_0_2px_0_#ffffff4d]" />
             )}
             <div className="min-w-0">
               <p className="text-xl font-extrabold text-white truncate">{profile.username}</p>
