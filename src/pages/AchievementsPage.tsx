@@ -26,11 +26,13 @@ export function AchievementsPage() {
   }, [user, worldId])
 
   const tiers = ['gold', 'silver', 'bronze'] as const
+  // Globale Erfolge (z. B. Tutorial) gehören zu keiner Spielwelt -> hier nicht listen
+  const worldAchievements = ACHIEVEMENTS.filter(a => !a.global)
 
   return (
     <div className="p-4 max-w-lg mx-auto pt-5 pb-8">
       <h1 className="text-2xl font-extrabold text-white mb-1">Erfolge</h1>
-      <p className="text-white/50 text-sm mb-6">{earned.size} / {ACHIEVEMENTS.length} freigeschaltet</p>
+      <p className="text-white/50 text-sm mb-6">{earned.size} / {worldAchievements.length} freigeschaltet</p>
 
       {loading ? (
         <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" /></div>
@@ -41,7 +43,7 @@ export function AchievementsPage() {
               {tier === 'gold' ? '🥇 Gold' : tier === 'silver' ? '🥈 Silber' : '🥉 Bronze'}
             </h2>
             <div className="flex flex-col gap-2">
-              {ACHIEVEMENTS.filter(a => a.tier === tier).map(a => {
+              {worldAchievements.filter(a => a.tier === tier).map(a => {
                 const unlocked = earned.has(a.key)
                 return (
                   <GameCard key={a.key} className={unlocked ? '' : 'opacity-55'}>

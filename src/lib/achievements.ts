@@ -16,6 +16,8 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'perfect_event', key: 'perfect_event', name: 'Perfekter Urlaub', description: 'Schließe ein komplettes 10-Tages-Event ab und finde die gesuchte Person an jedem Tag richtig.', tier: 'gold', xp_reward: 2500 },
   { id: 'campaign_king', key: 'campaign_king', name: 'Kampagnen-König', description: 'Schließe alle Bilder einer kompletten Kampagne erfolgreich ab.', tier: 'gold', xp_reward: 1200 },
   { id: 'last_minute', key: 'last_minute', name: 'Nerven aus Stahl', description: 'Finde die gesuchte Person in der letzten Stunde, bevor das aktuelle Bild verfällt.', tier: 'gold', xp_reward: 1000 },
+  // Global (nicht an eine Spielwelt gebunden) – wird über complete_tutorial vergeben
+  { id: 'tutorial_master', key: 'tutorial_master', name: 'Tutorial-Absolvent', description: 'Schließe das Tutorial ab und lerne die Grundlagen des Spiels.', tier: 'bronze', xp_reward: 150, global: true },
 ]
 
 export const ACHIEVEMENT_MAP = Object.fromEntries(ACHIEVEMENTS.map(a => [a.key, a]))

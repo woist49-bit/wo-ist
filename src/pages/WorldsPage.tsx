@@ -1,6 +1,6 @@
 import { useState, useEffect, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users, Layers } from 'lucide-react'
+import { Users, Layers, GraduationCap, Check } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { Button } from '../components/ui/Button'
@@ -101,6 +101,27 @@ export function WorldsPage() {
           <h1 className="text-2xl font-extrabold text-white">Hallo, {profile?.username} 👋</h1>
           <p className="text-white/50 text-sm mt-0.5">Deine Spielwelten</p>
         </div>
+
+        <button
+          onClick={() => navigate('/tutorial')}
+          className="w-full mb-4 flex items-center gap-3 bg-[#fdf6e3] border-[3px] border-[#e6d3a3] rounded-2xl px-4 py-3 text-left active:translate-y-[2px] transition-transform shadow-[0_4px_0_#00000014]"
+        >
+          <div className="w-11 h-11 rounded-xl bg-violet-500 text-white flex items-center justify-center shadow-[0_2px_0_#5b21b6,inset_0_2px_0_#ffffff4d] flex-shrink-0">
+            <GraduationCap size={22} strokeWidth={2.5} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-extrabold text-slate-800 flex items-center gap-1.5">
+              Tutorial
+              {profile?.tutorial_completed && (
+                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-500 text-white" aria-label="Abgeschlossen">
+                  <Check size={11} strokeWidth={4} />
+                </span>
+              )}
+            </p>
+            <p className="text-xs text-slate-500">So funktioniert „Wo ist…?" – jederzeit wiederholbar</p>
+          </div>
+          <span className="text-slate-400 text-xl flex-shrink-0">›</span>
+        </button>
 
         <div className="flex gap-3 mb-6">
           <Button onClick={() => { setShowCreate(true); setShowJoin(false); setError('') }} variant="primary" className="flex-1">

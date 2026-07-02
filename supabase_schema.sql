@@ -487,3 +487,31 @@ begin
   end loop;
 end;
 $$;
+
+-- =============================================
+-- SCHRITT 7: Tutorial (global, keine Spielwelt)
+-- =============================================
+
+-- Merkt pro Spieler, ob das Tutorial abgeschlossen wurde (Haken am Button + einmaliges Achievement)
+alter table profiles add column if not exists tutorial_completed boolean not null default false;
+
+-- Schließt das Tutorial ab: setzt das Flag und vergibt das globale Achievement
+-- "tutorial_master" (150 XP) genau einmal. Gibt true zurück, wenn neu vergeben (fürs Banner).
+create or replace function complete_tutorial(p_user_id uuid)
+returns boolean language plpgsql security definer as $$
+declare
+  v_first boolean;
+begin
+  select not coalesce(tutorial_completed, false) into v_first from profiles where id = p_user_id;
+  update profiles set tutorial_completed = true where id = p_user_id;
+  if v_first and not exists (
+    select 1 from player_achievements where user_id = p_user_id and achievement_key = 'tutorial_master'
+  ) then
+    insert into player_achievements (user_id, world_id, achievement_key)
+    values (p_user_id, null, 'tutorial_master');
+    perform add_xp(p_user_id, 150, null);
+    return true;
+  end if;
+  return false;
+end;
+$$;

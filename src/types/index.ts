@@ -6,6 +6,7 @@ export interface Profile {
   global_level: number
   global_wins: number
   avatar_url: string | null
+  tutorial_completed: boolean
 }
 
 export interface World {
@@ -74,6 +75,7 @@ export interface Achievement {
   description: string
   tier: 'bronze' | 'silver' | 'gold'
   xp_reward: number
+  global?: boolean // nicht an eine Spielwelt gebunden (z. B. Tutorial) -> nicht in Welt-Erfolgen listen
 }
 
 export interface PlayerAchievement {
