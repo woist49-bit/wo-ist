@@ -6,6 +6,8 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'first_event', key: 'first_event', name: 'Dabei sein ist alles', description: 'Nimm an deinem ersten Live-Event teil.', tier: 'bronze', xp_reward: 100 },
   { id: 'legacy_first', key: 'legacy_first', name: 'Geschichtsunterricht', description: 'Schließe dein erstes Bild in einer alten Legacy-Kampagne ab.', tier: 'bronze', xp_reward: 150 },
   { id: 'near_miss', key: 'near_miss', name: 'Knapp vorbei ist auch daneben', description: 'Tippe daneben, liege aber weniger als 5% der Bildbreite vom Ziel entfernt.', tier: 'bronze', xp_reward: 100 },
+  // Global (nicht an eine Spielwelt gebunden) – wird über complete_tutorial vergeben, hier bei Bronze einsortiert
+  { id: 'tutorial_master', key: 'tutorial_master', name: 'Tutorial-Absolvent', description: 'Schließe das Tutorial ab und lerne die Grundlagen des Spiels.', tier: 'bronze', xp_reward: 150, global: true },
   // Silver
   { id: 'eagle_eye', key: 'eagle_eye', name: 'Adlerauge', description: 'Finde die gesuchte Person in unter 5 Sekunden.', tier: 'silver', xp_reward: 500 },
   { id: 'no_miss', key: 'no_miss', name: 'Urlaubs-Dauergast', description: 'Schließe ein komplettes Live-Event ab, ohne ein einziges Bild zu verpassen.', tier: 'silver', xp_reward: 500 },
@@ -16,8 +18,6 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'perfect_event', key: 'perfect_event', name: 'Perfekter Urlaub', description: 'Schließe ein komplettes 10-Tages-Event ab und finde die gesuchte Person an jedem Tag richtig.', tier: 'gold', xp_reward: 2500 },
   { id: 'campaign_king', key: 'campaign_king', name: 'Kampagnen-König', description: 'Schließe alle Bilder einer kompletten Kampagne erfolgreich ab.', tier: 'gold', xp_reward: 1200 },
   { id: 'last_minute', key: 'last_minute', name: 'Nerven aus Stahl', description: 'Finde die gesuchte Person in der letzten Stunde, bevor das aktuelle Bild verfällt.', tier: 'gold', xp_reward: 1000 },
-  // Global (nicht an eine Spielwelt gebunden) – wird über complete_tutorial vergeben
-  { id: 'tutorial_master', key: 'tutorial_master', name: 'Tutorial-Absolvent', description: 'Schließe das Tutorial ab und lerne die Grundlagen des Spiels.', tier: 'bronze', xp_reward: 150, global: true },
 ]
 
 export const ACHIEVEMENT_MAP = Object.fromEntries(ACHIEVEMENTS.map(a => [a.key, a]))
