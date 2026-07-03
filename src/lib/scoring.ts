@@ -7,24 +7,27 @@ export function calcPoints(seconds: number): number {
 // - Zeitlupe: läuft 0.5x schnell für die ersten 10s.
 // - Überlappen sich Zeitlupe und Timer-Debuff, heben sie sich auf (1x).
 // Mehr effektive Zeit = weniger Punkte, weniger effektive Zeit = mehr Punkte.
+// Momentane Timer-Geschwindigkeit zur echten Zeit t: >1 schneller (Timer-Debuff),
+// <1 langsamer (Zeitlupe), 1 normal (auch wenn sich beide aufheben).
+export function timeWarpRate(t: number, timerStacks: number, zeitlupe: boolean): number {
+  const d = t < 10 * Math.max(0, timerStacks)   // im Timer-Debuff-Fenster?
+  const z = t < (zeitlupe ? 10 : 0)             // im Zeitlupe-Fenster?
+  if (d && z) return 1      // heben sich auf
+  if (d) return 2           // doppelt so schnell
+  if (z) return 0.5         // halb so schnell
+  return 1
+}
+
 export function effectiveElapsed(realSeconds: number, timerStacks: number, zeitlupe: boolean): number {
   if (realSeconds <= 0) return 0
   const dEnd = 10 * Math.max(0, timerStacks)   // Ende des Timer-Debuff-Fensters
   const zEnd = zeitlupe ? 10 : 0               // Ende des Zeitlupe-Fensters
-  const rateAt = (t: number) => {
-    const d = t < dEnd
-    const z = t < zEnd
-    if (d && z) return 1      // heben sich auf
-    if (d) return 2           // doppelt so schnell
-    if (z) return 0.5         // halb so schnell
-    return 1
-  }
   // Raten sind zwischen den Grenzen konstant -> stückweise integrieren
   const bounds = Array.from(new Set([0, zEnd, dEnd, realSeconds].filter(b => b >= 0 && b <= realSeconds))).sort((a, b) => a - b)
   let eff = 0
   for (let i = 0; i < bounds.length - 1; i++) {
     const a = bounds[i], b = bounds[i + 1]
-    eff += (b - a) * rateAt((a + b) / 2)
+    eff += (b - a) * timeWarpRate((a + b) / 2, timerStacks, zeitlupe)
   }
   return eff
 }

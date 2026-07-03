@@ -4,7 +4,7 @@ import { ChevronLeft, Swords, Zap, Hourglass } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useNotifications } from '../stores/notifications'
-import { calcPoints, isHit, distanceFraction, levelFromXp, effectiveElapsed } from '../lib/scoring'
+import { calcPoints, isHit, distanceFraction, levelFromXp, effectiveElapsed, timeWarpRate } from '../lib/scoring'
 import { getShopItem } from '../lib/shop'
 import { Button } from '../components/ui/Button'
 import { GameCard } from '../components/ui/GameCard'
@@ -40,6 +40,7 @@ export function ImageGamePage() {
   const [debuffs, setDebuffs] = useState<ActiveDebuff[]>([])
   const [begun, setBegun] = useState(false)      // Timer läuft erst, wenn die Runde wirklich startet
   const [blurred, setBlurred] = useState(false)
+  const [timerRate, setTimerRate] = useState(1)       // aktuelle Timer-Geschwindigkeit (für Farbe)
   const [imgLoaded, setImgLoaded] = useState(false)   // Bild-File fertig geladen?
   const [imgError, setImgError] = useState(false)     // Bild konnte nicht geladen werden
   const [sabotageAck, setSabotageAck] = useState(false) // "Trotzdem spielen" bestätigt?
@@ -105,6 +106,7 @@ export function ImageGamePage() {
     const interval = setInterval(() => {
       const real = (Date.now() - startTimeRef.current) / 1000
       setElapsed(Math.round(effectiveElapsed(real, timerStacks, hasZeitlupe)))
+      setTimerRate(timeWarpRate(real, timerStacks, hasZeitlupe))
       if (blurStacks > 0) setBlurred(blurIntervals.some(([a, b]) => real >= a && real < b))
     }, 100)
     return () => clearInterval(interval)
@@ -292,7 +294,11 @@ export function ImageGamePage() {
       <div className="absolute top-0 inset-x-0 z-20 flex items-center gap-3 px-3 pb-3 safe-top bg-gradient-to-b from-black/80 via-black/40 to-transparent">
         <IconButton variant="grey" onClick={handleBack} aria-label="Zurück"><ChevronLeft size={22} strokeWidth={2.5} /></IconButton>
         {placing && (
-          <span className="ml-auto bg-slate-200 text-slate-700 text-base font-mono font-extrabold px-4 py-2.5 rounded-2xl shadow-[0_3px_0_#94a3b8]">{elapsed}s</span>
+          <span className={`ml-auto text-base font-mono font-extrabold px-4 py-2.5 rounded-2xl ${
+            timerRate > 1 ? 'bg-red-500 text-white shadow-[0_3px_0_#b91c1c]'       // Timer-Debuff: schneller
+            : timerRate < 1 ? 'bg-green-500 text-white shadow-[0_3px_0_#15803d]'   // Zeitlupe: langsamer
+            : 'bg-slate-200 text-slate-700 shadow-[0_3px_0_#94a3b8]'
+          }`}>{elapsed}s</span>
         )}
         {revealed && (
           <span className={`ml-auto text-sm font-extrabold px-3.5 py-1.5 rounded-full text-white ${lastHit ? 'bg-green-500' : 'bg-red-500'}`}>
