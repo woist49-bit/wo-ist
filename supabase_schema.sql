@@ -750,7 +750,9 @@ $$;
 
 -- Setzt einen Debuff gegen einen Zielspieler auf ein noch gesperrtes Bild.
 -- Prüft: Bild noch gesperrt, Ziel ist Mitglied derselben Welt und hat noch nicht gespielt,
--- Absender besitzt das Debuff-Item. Zieht das Item ab. Gleicher Absender+Zi+Typ -> Stapel +1.
+-- Absender besitzt das Debuff-Item. Zieht das Item ab.
+-- Regel: EIN Debuff pro Absender, Bild und Zielspieler (kein Mehrfach-Vergeben).
+-- Verschiedene Absender stapeln (mehrere Zeilen) – wird in Phase 5 summiert.
 create or replace function cast_debuff(p_image_id uuid, p_target_player_id uuid, p_debuff_type text)
 returns void language plpgsql security definer as $$
 declare
@@ -766,14 +768,19 @@ begin
   where ei.id = p_image_id and ei.unlocks_at > now();     -- Bild muss noch gesperrt sein
   if v_world is null then raise exception 'IMAGE_NOT_LOCKED'; end if;
 
-  if not exists (select 1 from world_members where world_id = v_world and user_id = v_user) then
+  if not exists (select 1 from world_members wm where wm.world_id = v_world and wm.user_id = v_user) then
     raise exception 'NOT_A_MEMBER';
   end if;
-  if not exists (select 1 from world_members where world_id = v_world and user_id = p_target_player_id) then
+  if not exists (select 1 from world_members wm where wm.world_id = v_world and wm.user_id = p_target_player_id) then
     raise exception 'TARGET_NOT_MEMBER';
   end if;
   if exists (select 1 from player_attempts where image_id = p_image_id and user_id = p_target_player_id) then
     raise exception 'TARGET_ALREADY_PLAYED';
+  end if;
+  -- Schon einen Debuff auf diesen Spieler für dieses Bild vergeben? -> kein zweiter
+  if exists (select 1 from debuffs
+             where sender_id = v_user and image_id = p_image_id and target_player_id = p_target_player_id) then
+    raise exception 'ALREADY_CAST';
   end if;
 
   update player_inventory set quantity = quantity - 1
@@ -781,9 +788,22 @@ begin
   if not found then raise exception 'NOT_OWNED'; end if;
 
   insert into debuffs (sender_id, target_player_id, image_id, debuff_type, stacks)
-  values (v_user, p_target_player_id, p_image_id, p_debuff_type, 1)
-  on conflict (sender_id, target_player_id, image_id, debuff_type)
-    do update set stacks = debuffs.stacks + 1, consumed = false;
+  values (v_user, p_target_player_id, p_image_id, p_debuff_type, 1);
+end;
+$$;
+
+-- Debuffs, die ICH auf ein Bild vergeben habe – inkl. Zielspieler-Name.
+-- Für die Anzeige "Von dir vergeben" + zum Ausblenden bereits getroffener Ziele.
+create or replace function my_sent_debuffs(p_image_id uuid)
+returns table (debuff_type text, target_player_id uuid, target_username text)
+language plpgsql security definer as $$
+declare v_user uuid := auth.uid();
+begin
+  return query
+    select d.debuff_type, d.target_player_id, p.username
+    from debuffs d join profiles p on p.id = d.target_player_id
+    where d.image_id = p_image_id and d.sender_id = v_user
+    order by d.created_at;
 end;
 $$;
 

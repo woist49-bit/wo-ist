@@ -13,6 +13,7 @@ export type ImageStatus = 'locked' | 'open' | 'played'
 
 interface TargetPlayer { user_id: string; username: string; avatar_url: string | null }
 interface ReceivedDebuff { debuff_type: string; stacks: number; sender_username: string }
+interface SentDebuff { debuff_type: string; target_player_id: string; target_username: string }
 
 interface Props {
   image: EventImage
@@ -36,6 +37,7 @@ export function EventImagePopup({ image, index, status, attempt, inventory, onCl
   // Neu aktivierte Vor-Runden-Items (in dieser Popup-Sitzung an-/abgewählt)
   const [toggled, setToggled] = useState<Set<string>>(new Set())
   const [received, setReceived] = useState<ReceivedDebuff[]>([])
+  const [sent, setSent] = useState<SentDebuff[]>([]) // von mir vergebene Debuffs auf dieses Bild
 
   // Debuff-Zielauswahl (nur im gesperrten Zustand)
   const [debuffItem, setDebuffItem] = useState<ShopItem | null>(null)
@@ -45,13 +47,15 @@ export function EventImagePopup({ image, index, status, attempt, inventory, onCl
   useEffect(() => {
     let active = true
     ;(async () => {
-      const [armedRes, debuffRes] = await Promise.all([
+      const [armedRes, debuffRes, sentRes] = await Promise.all([
         supabase.from('player_image_items').select('item_key').eq('image_id', image.id),
         supabase.rpc('my_image_debuffs', { p_image_id: image.id }),
+        supabase.rpc('my_sent_debuffs', { p_image_id: image.id }),
       ])
       if (!active) return
       setArmed(new Set((armedRes.data ?? []).map(r => r.item_key)))
       setReceived((debuffRes.data ?? []) as ReceivedDebuff[])
+      setSent((sentRes.data ?? []) as SentDebuff[])
     })()
     return () => { active = false }
   }, [image.id])
@@ -93,7 +97,9 @@ export function EventImagePopup({ image, index, status, attempt, inventory, onCl
       setTargets([])
       return
     }
-    setTargets((data ?? []) as TargetPlayer[])
+    // Spieler ausblenden, die ich für dieses Bild schon debufft habe
+    const already = new Set(sent.map(s => s.target_player_id))
+    setTargets(((data ?? []) as TargetPlayer[]).filter(t => !already.has(t.user_id)))
   }
 
   async function castDebuff() {
@@ -105,16 +111,20 @@ export function EventImagePopup({ image, index, status, attempt, inventory, onCl
     setBusy(false)
     if (error) {
       const m = error.message || ''
-      const text = m.includes('TARGET_ALREADY_PLAYED') ? 'Dieser Spieler hat das Bild bereits gespielt.'
+      const text = m.includes('ALREADY_CAST') ? 'Du hast diesem Spieler für dieses Bild schon einen Debuff verpasst.'
+        : m.includes('TARGET_ALREADY_PLAYED') ? 'Dieser Spieler hat das Bild bereits gespielt.'
         : m.includes('IMAGE_NOT_LOCKED') ? 'Das Bild ist nicht mehr gesperrt.'
         : m.includes('NOT_OWNED') ? 'Du besitzt dieses Debuff-Item nicht mehr.'
         : `Debuff fehlgeschlagen: ${m}`
       addToast(text, 'error', 6000)
       return
     }
-    addToast(`${debuffItem.name} eingesetzt!`, 'success')
+    addToast(`${debuffItem.name} an ${targets?.find(t => t.user_id === selectedTarget)?.username ?? 'Spieler'} vergeben!`, 'success')
     setDebuffItem(null); setTargets(null); setSelectedTarget(null)
-    onChanged() // Inventar aktualisieren (Item abgezogen)
+    // "Von dir vergeben" + Inventar aktualisieren
+    const { data } = await supabase.rpc('my_sent_debuffs', { p_image_id: image.id })
+    setSent((data ?? []) as SentDebuff[])
+    onChanged() // Inventar (Item abgezogen)
   }
 
   const unlockMs = new Date(image.unlocks_at).getTime()
@@ -166,8 +176,27 @@ export function EventImagePopup({ image, index, status, attempt, inventory, onCl
                   </p>
                   <p className="text-xs text-slate-500 mb-3">
                     Freigeschaltet in <span className="font-extrabold text-slate-700">{untilUnlock > 0 ? formatCountdown(untilUnlock) : 'Kürze'}</span>.{' '}
-                    Vor der Freischaltung kannst du Debuffs auf andere Spieler legen.
+                    Vor der Freischaltung kannst du Debuffs auf andere Spieler legen. Pro Spieler nur einen.
                   </p>
+
+                  {sent.length > 0 && (
+                    <Section title="Von dir vergeben">
+                      <div className="flex flex-col gap-1.5">
+                        {sent.map((s, i) => {
+                          const it = getShopItem(s.debuff_type)
+                          const Icon = it?.icon ?? Search
+                          return (
+                            <div key={i} className="flex items-center gap-2 bg-red-100 text-red-700 rounded-xl px-2.5 py-1.5">
+                              <Icon size={16} strokeWidth={2.5} className="flex-shrink-0" />
+                              <span className="font-bold text-xs flex-1">{it?.name ?? s.debuff_type}</span>
+                              <span className="text-[11px] text-red-500 font-semibold">an {s.target_username}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </Section>
+                  )}
+
                   <ItemList
                     inventory={inventory}
                     render={item => {
@@ -266,7 +295,7 @@ function TargetSelection({ item, targets, selected, onSelect, onBack, onConfirm,
         {targets === null ? (
           <div className="py-8 flex justify-center"><div className="w-6 h-6 border-4 border-violet-400 border-t-transparent rounded-full animate-spin" /></div>
         ) : targets.length === 0 ? (
-          <p className="text-sm text-slate-500 text-center py-8">Kein Spieler verfügbar – alle haben das Bild schon gespielt.</p>
+          <p className="text-sm text-slate-500 text-center py-8">Kein Spieler verfügbar – alle haben das Bild schon gespielt oder von dir bereits einen Debuff erhalten.</p>
         ) : (
           <div className="flex flex-col gap-2">
             {targets.map(t => {
