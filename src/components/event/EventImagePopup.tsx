@@ -62,14 +62,12 @@ export function EventImagePopup({ image, index, status, attempt, inventory, onCl
 
   const owned = (key: string) => inventory.get(key) ?? 0
   const activated = new Set([...armed, ...toggled])
+  const hasBuff = [...activated].some(k => PRE_ROUND_ITEM_KEYS.includes(k)) // schon ein Selbst-Buff aktiv?
 
+  // Nur EIN Vor-Runden-Buff pro Bild: Aktivieren ersetzt den bisher gewählten.
   function togglePre(key: string) {
-    if (armed.has(key)) return // bereits scharf gestellt -> nicht abwählbar
-    setToggled(prev => {
-      const next = new Set(prev)
-      next.has(key) ? next.delete(key) : next.add(key)
-      return next
-    })
+    if (armed.size > 0) return // schon scharf gestellt -> nichts mehr änderbar
+    setToggled(prev => (prev.has(key) ? new Set() : new Set([key])))
   }
 
   async function handlePlay() {
@@ -78,7 +76,14 @@ export function EventImagePopup({ image, index, status, attempt, inventory, onCl
       setBusy(true)
       const { error } = await supabase.rpc('arm_pre_round_items', { p_image_id: image.id, p_item_keys: keys })
       setBusy(false)
-      if (error) { addToast('Item konnte nicht eingesetzt werden: ' + (error.message || ''), 'error', 6000); return }
+      if (error) {
+        const m = error.message || ''
+        const text = m.includes('TOO_MANY_BUFFS') ? 'Pro Bild ist nur ein Buff erlaubt.'
+          : m.includes('NOT_OWNED') ? 'Du besitzt dieses Item nicht mehr.'
+          : 'Item konnte nicht eingesetzt werden: ' + m
+        addToast(text, 'error', 6000)
+        return
+      }
     }
     onPlay()
   }
@@ -213,17 +218,22 @@ export function EventImagePopup({ image, index, status, attempt, inventory, onCl
 
               {status === 'open' && (
                 <>
-                  <p className="text-sm text-slate-500 mb-3">Aktiviere Items für diese Runde und starte dann das Bild.</p>
+                  <p className="text-sm text-slate-500 mb-3">Aktiviere einen Buff für diese Runde (nur einer pro Bild) und starte dann das Bild.</p>
                   <ItemList
                     inventory={inventory}
                     render={item => {
                       if (PRE_ROUND_ITEM_KEYS.includes(item.key)) {
+                        const isActive = activated.has(item.key)
+                        // Ist bereits ein anderer Buff aktiv? -> dieser hier gesperrt (nur ein Buff pro Bild)
+                        if (!isActive && hasBuff) {
+                          return <ItemRow key={item.key} item={item} count={owned(item.key)} tone="disabled" hint="Nur ein Buff pro Bild" />
+                        }
                         return (
                           <ItemRow
                             key={item.key}
                             item={item}
                             count={owned(item.key)}
-                            tone={activated.has(item.key) ? 'active' : 'toggle'}
+                            tone={isActive ? 'active' : 'toggle'}
                             locked={armed.has(item.key)}
                             onAction={() => togglePre(item.key)}
                           />

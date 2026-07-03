@@ -724,6 +724,7 @@ declare
   v_user uuid := auth.uid();
   v_key text;
   v_pre text[] := array['double_points', 'slow_motion'];
+  v_buffs integer;   -- Anzahl bereits scharf gestellter Buffs für dieses Bild
 begin
   if v_user is null then raise exception 'NOT_AUTHENTICATED'; end if;
   if not exists (select 1 from event_images where id = p_image_id and unlocks_at <= now()) then
@@ -733,6 +734,9 @@ begin
     raise exception 'ALREADY_PLAYED';
   end if;
 
+  select count(*) into v_buffs from player_image_items
+  where player_id = v_user and image_id = p_image_id and item_key = any(v_pre);
+
   foreach v_key in array coalesce(p_item_keys, '{}'::text[]) loop
     if not (v_key = any(v_pre)) then continue; end if;                    -- nur Vor-Runden-Items
     -- schon scharf gestellt? -> nicht erneut abziehen
@@ -740,10 +744,12 @@ begin
                where player_id = v_user and image_id = p_image_id and item_key = v_key) then
       continue;
     end if;
+    if v_buffs >= 1 then raise exception 'TOO_MANY_BUFFS'; end if;        -- nur EIN Buff pro Bild
     update player_inventory set quantity = quantity - 1
       where player_id = v_user and item_key = v_key and quantity > 0;
     if not found then raise exception 'NOT_OWNED:%', v_key; end if;
     insert into player_image_items (player_id, image_id, item_key) values (v_user, p_image_id, v_key);
+    v_buffs := v_buffs + 1;
   end loop;
 end;
 $$;
