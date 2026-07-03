@@ -32,7 +32,11 @@ export function ShopPage() {
     const { error } = await supabase.rpc('buy_item', { p_item_key: item.key })
     setBuying(null)
     if (error) {
-      addToast(error.message.includes('NOT_ENOUGH_GEMS') ? 'Zu wenig Gems.' : 'Kauf fehlgeschlagen.', 'error')
+      const m = error.message || ''
+      const text = m.includes('NOT_ENOUGH_GEMS') ? 'Zu wenig Gems.'
+        : m.includes('UNKNOWN_ITEM') ? 'Item noch nicht verfügbar – ist die buy_item-RPC aktuell?'
+        : `Kauf fehlgeschlagen: ${m}`
+      addToast(text, 'error', 6000)
       return
     }
     refreshProfile()       // Gems im Header aktualisieren
