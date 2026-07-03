@@ -11,36 +11,33 @@ import { IconButton } from '../ui/IconButton'
 const BG_APP = 'h-full bg-gradient-to-b from-teal-700 via-teal-800 to-slate-800 text-white flex flex-col overflow-hidden'
 const BG_WORLD = 'h-full bg-gradient-to-b from-slate-600 via-slate-700 to-slate-800 text-white flex flex-col overflow-hidden'
 
-function ProfileButton({ onClick }: { onClick: () => void }) {
-  const { profile } = useAuth()
-  const initial = profile?.username?.slice(0, 1).toUpperCase()
-  return (
-    <button
-      onClick={onClick}
-      className="relative w-12 h-12 rounded-full overflow-hidden bg-violet-500 text-white font-bold text-lg flex items-center justify-center shadow-[0_3px_0_#5b21b6,inset_0_2px_0_#ffffff4d] active:translate-y-[2px] active:shadow-[0_1px_0_#5b21b6,inset_0_2px_0_#ffffff4d] transition-all duration-100 touch-manipulation select-none"
-      aria-label="Profil"
-    >
-      {profile?.avatar_url
-        ? <img src={profile.avatar_url} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover" />
-        : (initial || <UserCircle size={24} />)}
-    </button>
-  )
-}
-
-// Gem-Anzeige neben dem Profil-Button. Tippen öffnet den Shop. Zahl kommt aus dem
-// zentralen Auth-Zustand -> aktualisiert sich, sobald Gems verdient/ausgegeben werden.
-function GemButton() {
+// Ein Game-UI-Feld oben rechts (beige, dicker Rand) das Gem-Anzeige und Profilbild
+// zusammenfasst: links die Gems in Grün (Tipp -> Shop), rechts der runde Avatar (Tipp -> Profil).
+// Gem-Zahl kommt aus dem zentralen Auth-Zustand -> aktualisiert sich beim Verdienen/Ausgeben.
+function HeaderWallet({ onProfile }: { onProfile: () => void }) {
   const { profile } = useAuth()
   const navigate = useNavigate()
+  const initial = profile?.username?.slice(0, 1).toUpperCase()
   return (
-    <button
-      onClick={() => navigate('/shop')}
-      className="flex items-center gap-1.5 h-12 bg-black/20 rounded-full pl-3 pr-3.5 active:translate-y-[1px] transition-transform touch-manipulation select-none"
-      aria-label="Shop"
-    >
-      <Gem size={19} strokeWidth={2.5} className="text-cyan-300" />
-      <span className="text-white font-extrabold tabular-nums">{profile?.gems ?? 0}</span>
-    </button>
+    <div className="flex items-center gap-2 bg-[#fdf6e3] border-[3px] border-[#e6d3a3] rounded-full py-1 pl-3.5 pr-1 shadow-[0_4px_0_#0000001f]">
+      <button
+        onClick={() => navigate('/shop')}
+        className="flex items-center gap-1.5 active:scale-95 transition-transform touch-manipulation select-none"
+        aria-label="Shop"
+      >
+        <Gem size={20} strokeWidth={2.5} className="text-emerald-500" />
+        <span className="font-extrabold text-emerald-700 tabular-nums">{profile?.gems ?? 0}</span>
+      </button>
+      <button
+        onClick={onProfile}
+        className="relative w-10 h-10 rounded-full overflow-hidden bg-violet-500 text-white font-bold flex items-center justify-center shadow-[0_2px_0_#5b21b6,inset_0_2px_0_#ffffff4d] active:translate-y-[1px] transition-transform touch-manipulation select-none flex-shrink-0"
+        aria-label="Profil"
+      >
+        {profile?.avatar_url
+          ? <img src={profile.avatar_url} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover" />
+          : (initial || <UserCircle size={22} />)}
+      </button>
+    </div>
   )
 }
 
@@ -52,10 +49,7 @@ function HeaderBar({ onBack, onProfile, bg = '' }: { onBack?: () => void; onProf
       {onBack
         ? <IconButton variant="grey" onClick={onBack} aria-label="Zurück"><ChevronLeft size={24} strokeWidth={2.5} /></IconButton>
         : <div className="w-12" />}
-      <div className="flex items-center gap-2">
-        <GemButton />
-        <ProfileButton onClick={onProfile} />
-      </div>
+      <HeaderWallet onProfile={onProfile} />
     </header>
   )
 }
