@@ -655,8 +655,11 @@ create or replace function buy_item(p_item_key text)
 returns integer language plpgsql security definer as $$
 declare
   v_user uuid := auth.uid();
-  -- Phase 3 ersetzt diese Preisliste durch die echten Items:
-  prices jsonb := '{ "test_item": 10 }'::jsonb;
+  -- Server-autoritative Preise (müssen mit src/lib/shop.ts übereinstimmen)
+  prices jsonb := '{
+    "magnifier": 150, "double_points": 220, "slow_motion": 280,
+    "timer_debuff": 180, "blur_debuff": 180
+  }'::jsonb;
   v_price integer;
   v_qty integer;
 begin
