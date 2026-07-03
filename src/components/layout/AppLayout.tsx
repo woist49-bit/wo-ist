@@ -1,45 +1,16 @@
 import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useParams, useLocation } from 'react-router-dom'
-import { ChevronLeft, UserCircle, Home, MessageCircle, Trophy, Gem } from 'lucide-react'
+import { ChevronLeft, Home, MessageCircle, Trophy } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../stores/toast'
 import { signOut } from '../../stores/auth'
 import { IconButton } from '../ui/IconButton'
+import { HeaderWallet } from './HeaderWallet'
 
 // Hauptmenü (Teal) und Welt (Slate) bewusst unterschiedlich, damit man sie nicht verwechselt.
 const BG_APP = 'h-full bg-gradient-to-b from-teal-700 via-teal-800 to-slate-800 text-white flex flex-col overflow-hidden'
 const BG_WORLD = 'h-full bg-gradient-to-b from-slate-600 via-slate-700 to-slate-800 text-white flex flex-col overflow-hidden'
-
-// Ein Game-UI-Feld oben rechts (beige, dicker Rand) das Gem-Anzeige und Profilbild
-// zusammenfasst: links die Gems in Grün (Tipp -> Shop), rechts der runde Avatar (Tipp -> Profil).
-// Gem-Zahl kommt aus dem zentralen Auth-Zustand -> aktualisiert sich beim Verdienen/Ausgeben.
-function HeaderWallet({ onProfile }: { onProfile: () => void }) {
-  const { profile } = useAuth()
-  const navigate = useNavigate()
-  const initial = profile?.username?.slice(0, 1).toUpperCase()
-  return (
-    <div className="flex items-center gap-2 bg-[#fdf6e3] border-[3px] border-[#e6d3a3] rounded-full py-1 pl-3.5 pr-1 shadow-[0_4px_0_#0000001f]">
-      <button
-        onClick={() => navigate('/shop')}
-        className="flex items-center gap-1.5 active:scale-95 transition-transform touch-manipulation select-none"
-        aria-label="Shop"
-      >
-        <Gem size={20} strokeWidth={2.5} className="text-emerald-500" />
-        <span className="font-extrabold text-emerald-700 tabular-nums">{profile?.gems ?? 0}</span>
-      </button>
-      <button
-        onClick={onProfile}
-        className="relative w-10 h-10 rounded-full overflow-hidden bg-violet-500 text-white font-bold flex items-center justify-center shadow-[0_2px_0_#5b21b6,inset_0_2px_0_#ffffff4d] active:translate-y-[1px] transition-transform touch-manipulation select-none flex-shrink-0"
-        aria-label="Profil"
-      >
-        {profile?.avatar_url
-          ? <img src={profile.avatar_url} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover" />
-          : (initial || <UserCircle size={22} />)}
-      </button>
-    </div>
-  )
-}
 
 // onBack optional: ohne Back-Button (Hauptmenü) bleibt links ein Platzhalter, damit Profil rechts steht.
 // bg optional: auf der Welt-Startseite die Hero-Farbe, damit oben alles ein zusammenhängender Block ist.

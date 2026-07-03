@@ -8,6 +8,7 @@ import { SHOP_ITEMS, type ShopItem } from '../lib/shop'
 import { Button } from '../components/ui/Button'
 import { GameCard } from '../components/ui/GameCard'
 import { IconButton } from '../components/ui/IconButton'
+import { HeaderWallet } from '../components/layout/HeaderWallet'
 
 export function ShopPage() {
   const navigate = useNavigate()
@@ -48,10 +49,7 @@ export function ShopPage() {
     <div className="fixed inset-0 z-50 bg-gradient-to-b from-slate-600 via-slate-700 to-slate-800 flex flex-col animate-slide-in-up">
       <header className="px-3 pt-2 pb-2 safe-top flex items-center justify-between flex-shrink-0">
         <IconButton variant="grey" onClick={() => navigate(-1)} aria-label="Zurück"><ChevronLeft size={24} strokeWidth={2.5} /></IconButton>
-        <div className="flex items-center gap-1.5 bg-[#fdf6e3] border-[3px] border-[#e6d3a3] rounded-full px-3.5 py-1.5 shadow-[0_3px_0_#0000001f]">
-          <Gem size={19} strokeWidth={2.5} className="text-emerald-500" />
-          <span className="font-extrabold text-emerald-700 tabular-nums">{gems}</span>
-        </div>
+        <HeaderWallet onProfile={() => navigate('/profile')} />
       </header>
 
       <div className="px-4 flex-shrink-0">
