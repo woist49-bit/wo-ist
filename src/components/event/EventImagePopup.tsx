@@ -11,7 +11,8 @@ import type { EventImage, PlayerAttempt } from '../../types'
 
 export type ImageStatus = 'locked' | 'open' | 'played'
 
-interface TargetPlayer { user_id: string; username: string; avatar_url: string | null }
+interface DebuffCount { debuff_type: string; stacks: number }
+interface TargetPlayer { user_id: string; username: string; avatar_url: string | null; active_debuffs: DebuffCount[] }
 interface ReceivedDebuff { debuff_type: string; stacks: number; sender_username: string }
 interface SentDebuff { debuff_type: string; target_player_id: string; target_username: string }
 
@@ -307,22 +308,42 @@ function TargetSelection({ item, targets, selected, onSelect, onBack, onConfirm,
         ) : targets.length === 0 ? (
           <p className="text-sm text-slate-500 text-center py-8">Kein Spieler verfügbar – alle haben das Bild schon gespielt oder von dir bereits einen Debuff erhalten.</p>
         ) : (
-          <div className="flex flex-col gap-2">
-            {targets.map(t => {
-              const sel = selected === t.user_id
-              return (
-                <button
-                  key={t.user_id}
-                  onClick={() => onSelect(t.user_id)}
-                  className={`flex items-center gap-3 rounded-2xl px-3 py-2 border-2 transition-colors ${sel ? 'bg-red-50 border-red-400' : 'bg-white border-transparent'}`}
-                >
-                  <Avatar url={t.avatar_url} name={t.username} className="w-9 h-9 rounded-full text-sm" />
-                  <span className="font-bold text-slate-800 flex-1 text-left truncate">{t.username}</span>
-                  {sel && <Check size={20} strokeWidth={3} className="text-red-500 flex-shrink-0" />}
-                </button>
-              )
-            })}
-          </div>
+          <>
+            <p className="text-[11px] text-slate-400 mb-2">Rote Marker zeigen, welche Debuffs schon auf einem Spieler liegen.</p>
+            <div className="flex flex-col gap-2">
+              {targets.map(t => {
+                const sel = selected === t.user_id
+                return (
+                  <button
+                    key={t.user_id}
+                    onClick={() => onSelect(t.user_id)}
+                    className={`flex items-center gap-3 rounded-2xl px-3 py-2 border-2 transition-colors ${sel ? 'bg-red-50 border-red-400' : 'bg-white border-transparent'}`}
+                  >
+                    <Avatar url={t.avatar_url} name={t.username} className="w-9 h-9 rounded-full text-sm" />
+                    <div className="flex-1 min-w-0 text-left">
+                      <span className="block font-bold text-slate-800 truncate">{t.username}</span>
+                      {t.active_debuffs.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                          {t.active_debuffs.map(d => {
+                            const it = getShopItem(d.debuff_type)
+                            const Icon = it?.icon ?? Search
+                            return (
+                              <span key={d.debuff_type} className="inline-flex items-center gap-0.5 bg-red-100 text-red-600 text-[10px] font-extrabold rounded-full pl-1.5 pr-2 py-0.5">
+                                <Icon size={11} strokeWidth={2.5} /> ×{d.stacks}
+                              </span>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-emerald-500 font-semibold">noch frei</span>
+                      )}
+                    </div>
+                    {sel && <Check size={20} strokeWidth={3} className="text-red-500 flex-shrink-0" />}
+                  </button>
+                )
+              })}
+            </div>
+          </>
         )}
       </div>
       <div className="flex-shrink-0 p-4 pt-2">

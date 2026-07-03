@@ -814,10 +814,11 @@ end;
 $$;
 
 -- Mögliche Debuff-Ziele für ein Bild: Mitglieder derselben Welt (außer mir),
--- die dieses Bild noch NICHT gespielt haben. Security-Definer, weil player_attempts
--- fremder Spieler sonst nicht lesbar sind. Nur für Mitglieder der Welt.
+-- die dieses Bild noch NICHT gespielt haben. Liefert je Kandidat die bereits auf ihm
+-- liegenden Debuffs (aggregiert über ALLE Absender) mit, damit man sieht, wer schon
+-- was hat. Security-Definer, weil player_attempts + fremde Debuffs sonst nicht lesbar sind.
 create or replace function image_debuff_targets(p_image_id uuid)
-returns table (user_id uuid, username text, avatar_url text)
+returns table (user_id uuid, username text, avatar_url text, active_debuffs jsonb)
 language plpgsql security definer as $$
 declare
   v_user uuid := auth.uid();
@@ -827,12 +828,20 @@ begin
   from event_images ei left join live_events le on le.id = ei.event_id
   where ei.id = p_image_id;
   if v_world is null then return; end if;
-  -- wm-Alias + qualifizierte Spalten: sonst kollidiert user_id mit der gleichnamigen
-  -- OUT-Spalte der RETURNS TABLE (Postgres: "column reference user_id is ambiguous").
+  -- wm-Alias + qualifizierte Spalten: sonst kollidiert user_id mit der gleichnamigen OUT-Spalte.
   if not exists (select 1 from world_members wm where wm.world_id = v_world and wm.user_id = v_user) then return; end if;
 
   return query
-    select p.id, p.username, p.avatar_url
+    select p.id, p.username, p.avatar_url,
+      coalesce((
+        select jsonb_agg(jsonb_build_object('debuff_type', t.debuff_type, 'stacks', t.total) order by t.debuff_type)
+        from (
+          select d.debuff_type, sum(d.stacks)::int as total
+          from debuffs d
+          where d.image_id = p_image_id and d.target_player_id = p.id
+          group by d.debuff_type
+        ) t
+      ), '[]'::jsonb)
     from world_members wm
     join profiles p on p.id = wm.user_id
     where wm.world_id = v_world
