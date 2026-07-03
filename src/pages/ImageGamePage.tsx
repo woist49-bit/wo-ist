@@ -1,15 +1,18 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, Swords, Zap, Hourglass } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useNotifications } from '../stores/notifications'
-import { calcPoints, isHit, distanceFraction, levelFromXp } from '../lib/scoring'
+import { calcPoints, isHit, distanceFraction, levelFromXp, effectiveElapsed } from '../lib/scoring'
+import { getShopItem } from '../lib/shop'
 import { Button } from '../components/ui/Button'
 import { GameCard } from '../components/ui/GameCard'
 import { IconButton } from '../components/ui/IconButton'
 import { ImageMarkerViewer, type ViewerMarker } from '../components/marker/ImageMarkerViewer'
 import type { EventImage, PlayerAttempt } from '../types'
+
+interface ActiveDebuff { debuff_type: string; stacks: number; sender_username: string }
 
 export function ImageGamePage() {
   const { worldId, imageId, campaignId } = useParams<{ worldId: string; imageId: string; campaignId: string }>()
@@ -31,6 +34,12 @@ export function ImageGamePage() {
 
   const [nat, setNat] = useState({ w: 0, h: 0 })
   const [tip, setTip] = useState<{ x: number; y: number } | null>(null)
+
+  // Phase 5: aktive Effekte für diese Runde (nur Live-Event, frischer Versuch)
+  const [armed, setArmed] = useState<Set<string>>(new Set())
+  const [debuffs, setDebuffs] = useState<ActiveDebuff[]>([])
+  const [begun, setBegun] = useState(true)   // Timer läuft erst, wenn die Runde wirklich startet
+  const [blurred, setBlurred] = useState(false)
 
   const startTimeRef = useRef<number>(Date.now())
 
@@ -56,21 +65,61 @@ export function ImageGamePage() {
       setLastPoints(attRes.data.points)
       setRevealed(true)
     }
+
+    // Aktive Items/Debuffs nur für einen frischen Live-Versuch laden
+    let hasDebuffs = false
+    if (!isCampaign && !attRes.data) {
+      const [armedRes, debuffRes] = await Promise.all([
+        supabase.from('player_image_items').select('item_key').eq('image_id', imageId),
+        supabase.rpc('my_image_debuffs', { p_image_id: imageId }),
+      ])
+      setArmed(new Set((armedRes.data ?? []).map(r => r.item_key)))
+      const list = (debuffRes.data ?? []) as ActiveDebuff[]
+      setDebuffs(list)
+      hasDebuffs = list.length > 0
+    }
+
+    // Bei Debuffs erst nach dem Sabotage-Hinweis starten, sonst sofort
+    setBegun(!hasDebuffs)
     startTimeRef.current = Date.now()
     setLoading(false)
   }
 
   const placing = !revealed
 
+  const timerStacks = useMemo(() => debuffs.filter(d => d.debuff_type === 'timer_debuff').reduce((s, d) => s + d.stacks, 0), [debuffs])
+  const blurStacks = useMemo(() => debuffs.filter(d => d.debuff_type === 'blur_debuff').reduce((s, d) => s + d.stacks, 0), [debuffs])
+  const hasZeitlupe = armed.has('slow_motion')
+  const hasDouble = armed.has('double_points')
+  const hasDebuffs = timerStacks + blurStacks > 0
+
+  // Unschärfe-Fenster: pro Stapel drei ~1s-Flacker (bei 2s/5s/8s) im jeweiligen 10s-Block (echte Zeit)
+  const blurIntervals = useMemo(() => {
+    const arr: [number, number][] = []
+    for (let w = 0; w < blurStacks; w++) for (const s of [2, 5, 8]) arr.push([w * 10 + s, w * 10 + s + 1])
+    return arr
+  }, [blurStacks])
+
   useEffect(() => {
-    if (!placing) return
-    const interval = setInterval(() => setElapsed(Math.round((Date.now() - startTimeRef.current) / 1000)), 100)
+    if (!placing || !begun) return
+    const interval = setInterval(() => {
+      const real = (Date.now() - startTimeRef.current) / 1000
+      setElapsed(Math.round(effectiveElapsed(real, timerStacks, hasZeitlupe)))
+      if (blurStacks > 0) setBlurred(blurIntervals.some(([a, b]) => real >= a && real < b))
+    }, 100)
     return () => clearInterval(interval)
-  }, [placing])
+  }, [placing, begun, timerStacks, hasZeitlupe, blurStacks, blurIntervals])
+
+  function startRound() {
+    startTimeRef.current = Date.now()
+    setElapsed(0)
+    setBegun(true)
+  }
 
   async function confirmClick() {
     if (!tip || !image || !user || !nat.w) return
-    const seconds = Math.round((Date.now() - startTimeRef.current) / 1000)
+    const real = (Date.now() - startTimeRef.current) / 1000
+    const seconds = Math.round(effectiveElapsed(real, timerStacks, hasZeitlupe)) // Timer-Debuff/Zeitlupe verzerren die Zeit
     const hit = isHit(tip.x, tip.y, image.target_x, image.target_y, image.target_radius, nat.w, nat.h)
     const dist = distanceFraction(tip.x, tip.y, image.target_x, image.target_y)
     setSubmitting(true)
@@ -92,8 +141,9 @@ export function ImageGamePage() {
       return
     }
 
-    // Live-Event: genau ein Versuch
-    const points = hit ? calcPoints(seconds) : 0
+    // Live-Event: genau ein Versuch. Doppelte-Punkte-Buff verdoppelt bei Fund.
+    let points = hit ? calcPoints(seconds) : 0
+    if (hit && hasDouble) points *= 2
     const { data } = await supabase.from('player_attempts').insert({
       image_id: image.id, user_id: user.id, click_x: tip.x, click_y: tip.y,
       is_correct: hit, points, time_seconds: seconds,
@@ -121,7 +171,7 @@ export function ImageGamePage() {
   async function abortConfirm() {
     if (!image || !user) { navigate(-1); return }
     setSubmitting(true)
-    const seconds = Math.round((Date.now() - startTimeRef.current) / 1000)
+    const seconds = Math.round(effectiveElapsed((Date.now() - startTimeRef.current) / 1000, timerStacks, hasZeitlupe))
     await supabase.from('player_attempts').insert({
       image_id: image.id, user_id: user.id, click_x: tip?.x ?? 0, click_y: tip?.y ?? 0,
       is_correct: false, points: 0, time_seconds: seconds,
@@ -181,7 +231,10 @@ export function ImageGamePage() {
 
   return (
     <div className="fixed inset-0 z-50 bg-black">
-      <div className="absolute inset-0">
+      <div
+        className="absolute inset-0"
+        style={{ filter: blurred ? 'blur(16px)' : 'none', transition: 'filter 0.12s linear' }}
+      >
         <ImageMarkerViewer
           imageUrl={image.image_url}
           markers={markers}
@@ -191,6 +244,21 @@ export function ImageGamePage() {
           onTap={(x, y) => { if (placing && !submitting) setTip({ x, y }) }}
         />
       </div>
+
+      {/* Sabotage-Hinweis vor dem Start (Debuffs liegen auf diesem Bild) */}
+      {placing && !begun && hasDebuffs && (
+        <SabotageScreen debuffs={debuffs} onStart={startRound} onBack={() => navigate(-1)} />
+      )}
+
+      {/* Aktive Effekte während des Spielens */}
+      {placing && begun && (hasDouble || hasZeitlupe || timerStacks > 0 || blurStacks > 0) && (
+        <div className="absolute top-16 inset-x-0 z-20 flex justify-center gap-1.5 px-3 pointer-events-none">
+          {hasDouble && <EffectPill color="bg-green-500" icon={<Zap size={13} strokeWidth={2.5} />} label="2×" />}
+          {hasZeitlupe && <EffectPill color="bg-green-500" icon={<Hourglass size={13} strokeWidth={2.5} />} label="Zeitlupe" />}
+          {timerStacks > 0 && <EffectPill color="bg-red-500" icon={<Swords size={13} strokeWidth={2.5} />} label={`Timer ×${timerStacks}`} />}
+          {blurStacks > 0 && <EffectPill color="bg-red-500" icon={<Swords size={13} strokeWidth={2.5} />} label={`Unschärfe ×${blurStacks}`} />}
+        </div>
+      )}
 
       {/* Top-Leiste: Zurück + Timer-Badge */}
       <div className="absolute top-0 inset-x-0 z-20 flex items-center gap-3 px-3 pb-3 safe-top bg-gradient-to-b from-black/80 via-black/40 to-transparent">
@@ -249,6 +317,46 @@ export function ImageGamePage() {
           </GameCard>
         </div>
       )}
+    </div>
+  )
+}
+
+function EffectPill({ color, icon, label }: { color: string; icon: React.ReactNode; label: string }) {
+  return (
+    <span className={`inline-flex items-center gap-1 ${color} text-white text-xs font-extrabold px-2.5 py-1 rounded-full shadow-[0_2px_0_#0000002e]`}>
+      {icon}{label}
+    </span>
+  )
+}
+
+// Warnscreen vor dem Bild, wenn Debuffs darauf warten ("Du wurdest sabotiert!")
+function SabotageScreen({ debuffs, onStart, onBack }: { debuffs: ActiveDebuff[]; onStart: () => void; onBack: () => void }) {
+  return (
+    <div className="absolute inset-0 z-40 bg-black/85 flex items-center justify-center p-6 safe-top safe-area-pb">
+      <div className="w-full max-w-sm bg-slate-900 border-[3px] border-red-500 rounded-3xl p-6 text-center shadow-[0_0_40px_#ef444455] animate-pop-in">
+        <div className="w-16 h-16 rounded-2xl bg-red-500 text-white flex items-center justify-center mx-auto mb-3 shadow-[0_4px_0_#b91c1c]">
+          <Swords size={32} strokeWidth={2.5} />
+        </div>
+        <p className="text-2xl font-extrabold text-red-400 mb-1">Du wurdest sabotiert!</p>
+        <p className="text-sm text-white/50 mb-4">Diese Debuffs liegen auf diesem Bild:</p>
+        <div className="flex flex-col gap-2 mb-6 text-left">
+          {debuffs.map((d, i) => {
+            const it = getShopItem(d.debuff_type)
+            const Icon = it?.icon ?? Swords
+            return (
+              <div key={i} className="flex items-center gap-2.5 bg-red-500/15 border border-red-500/30 rounded-xl px-3 py-2">
+                <Icon size={18} strokeWidth={2.5} className="text-red-400 flex-shrink-0" />
+                <span className="font-bold text-white text-sm flex-1">{it?.name ?? d.debuff_type}{d.stacks > 1 ? ` ×${d.stacks}` : ''}</span>
+                <span className="text-[11px] text-red-300 font-semibold">von {d.sender_username}</span>
+              </div>
+            )
+          })}
+        </div>
+        <div className="flex gap-3">
+          <Button variant="secondary" className="flex-1" onClick={onBack}>Zurück</Button>
+          <Button variant="danger" className="flex-1" onClick={onStart}>Trotzdem spielen</Button>
+        </div>
+      </div>
     </div>
   )
 }
