@@ -633,3 +633,45 @@ begin
   return award_gems(p_user_id, 20, 'campaign', p_campaign_id::text);
 end;
 $$;
+
+-- =============================================
+-- SCHRITT 9: Shop / Inventar – Phase 2
+-- =============================================
+
+-- Gekaufte Items pro Spieler (stapelbar über quantity)
+create table if not exists player_inventory (
+  player_id uuid not null references profiles(id) on delete cascade,
+  item_key text not null,
+  quantity integer not null default 0,
+  primary key (player_id, item_key)
+);
+alter table player_inventory enable row level security;
+create policy "own inventory select" on player_inventory for select using (auth.uid() = player_id);
+
+-- Kauf eines Items: prüft + zieht Gems ATOMAR ab und legt das Item ins Inventar.
+-- Preis liegt serverseitig (nicht fälschbar). Nutzt auth.uid() statt eines Parameters,
+-- damit niemand für fremde Konten kaufen kann. Fehler: NOT_ENOUGH_GEMS / UNKNOWN_ITEM.
+create or replace function buy_item(p_item_key text)
+returns integer language plpgsql security definer as $$
+declare
+  v_user uuid := auth.uid();
+  -- Phase 3 ersetzt diese Preisliste durch die echten Items:
+  prices jsonb := '{ "test_item": 10 }'::jsonb;
+  v_price integer;
+  v_qty integer;
+begin
+  if v_user is null then raise exception 'NOT_AUTHENTICATED'; end if;
+  v_price := (prices ->> p_item_key)::integer;
+  if v_price is null then raise exception 'UNKNOWN_ITEM'; end if;
+
+  -- Nur abziehen, wenn genug Gems da sind (atomar in einer Anweisung)
+  update profiles set gems = gems - v_price where id = v_user and gems >= v_price;
+  if not found then raise exception 'NOT_ENOUGH_GEMS'; end if;
+
+  insert into player_inventory (player_id, item_key, quantity)
+  values (v_user, p_item_key, 1)
+  on conflict (player_id, item_key) do update set quantity = player_inventory.quantity + 1
+  returning quantity into v_qty;
+  return v_qty;
+end;
+$$;
