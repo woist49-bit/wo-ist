@@ -14,6 +14,7 @@ interface Props {
   markers?: ViewerMarker[]
   onTap?: (x_rel: number, y_rel: number) => void
   onReady?: (naturalW: number, naturalH: number) => void
+  onError?: () => void
   height?: number | string
   interactive?: boolean
   className?: string
@@ -44,6 +45,7 @@ export function ImageMarkerViewer({
   markers = [],
   onTap,
   onReady,
+  onError,
   height = 500,
   interactive = true,
   className = '',
@@ -239,6 +241,7 @@ export function ImageMarkerViewer({
             setNat({ w: im.naturalWidth, h: im.naturalHeight })
             onReady?.(im.naturalWidth, im.naturalHeight)
           }}
+          onError={() => onError?.()}
         />
       </div>
 

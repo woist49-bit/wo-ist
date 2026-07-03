@@ -38,8 +38,12 @@ export function ImageGamePage() {
   // Phase 5: aktive Effekte für diese Runde (nur Live-Event, frischer Versuch)
   const [armed, setArmed] = useState<Set<string>>(new Set())
   const [debuffs, setDebuffs] = useState<ActiveDebuff[]>([])
-  const [begun, setBegun] = useState(true)   // Timer läuft erst, wenn die Runde wirklich startet
+  const [begun, setBegun] = useState(false)      // Timer läuft erst, wenn die Runde wirklich startet
   const [blurred, setBlurred] = useState(false)
+  const [imgLoaded, setImgLoaded] = useState(false)   // Bild-File fertig geladen?
+  const [imgError, setImgError] = useState(false)     // Bild konnte nicht geladen werden
+  const [sabotageAck, setSabotageAck] = useState(false) // "Trotzdem spielen" bestätigt?
+  const [reloadKey, setReloadKey] = useState(0)       // erzwingt Neuladen des Bildes nach Fehler
 
   const startTimeRef = useRef<number>(Date.now())
 
@@ -67,21 +71,17 @@ export function ImageGamePage() {
     }
 
     // Aktive Items/Debuffs nur für einen frischen Live-Versuch laden
-    let hasDebuffs = false
     if (!isCampaign && !attRes.data) {
       const [armedRes, debuffRes] = await Promise.all([
         supabase.from('player_image_items').select('item_key').eq('image_id', imageId),
         supabase.rpc('my_image_debuffs', { p_image_id: imageId }),
       ])
       setArmed(new Set((armedRes.data ?? []).map(r => r.item_key)))
-      const list = (debuffRes.data ?? []) as ActiveDebuff[]
-      setDebuffs(list)
-      hasDebuffs = list.length > 0
+      setDebuffs((debuffRes.data ?? []) as ActiveDebuff[])
     }
 
-    // Bei Debuffs erst nach dem Sabotage-Hinweis starten, sonst sofort
-    setBegun(!hasDebuffs)
-    startTimeRef.current = Date.now()
+    // Timer startet NICHT hier – erst wenn das Bild-File geladen ist (Effekt unten)
+    // und ggf. der Sabotage-Hinweis bestätigt wurde.
     setLoading(false)
   }
 
@@ -115,6 +115,15 @@ export function ImageGamePage() {
     setElapsed(0)
     setBegun(true)
   }
+
+  // Runde startet, sobald das Bild geladen ist UND (keine Debuffs ODER Sabotage-Hinweis bestätigt).
+  // So läuft der Timer garantiert erst, wenn der Spieler das Bild wirklich sieht.
+  useEffect(() => {
+    if (revealed || begun || !imgLoaded) return
+    if (hasDebuffs && !sabotageAck) return
+    startRound()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealed, begun, imgLoaded, hasDebuffs, sabotageAck])
 
   async function confirmClick() {
     if (!tip || !image || !user || !nat.w) return
@@ -159,7 +168,8 @@ export function ImageGamePage() {
 
   function playAgain() {
     setRevealed(false); setTip(null); setLastHit(null); setLastPoints(0)
-    startTimeRef.current = Date.now()
+    setElapsed(0)
+    startTimeRef.current = Date.now() // Bild ist schon geladen -> direkt weiter, begun bleibt true
   }
 
   // Live-Event: Zurück vor dem Bestätigen -> Abbruch-Dialog. Kampagne / aufgelöst: direkt zurück.
@@ -218,7 +228,7 @@ export function ImageGamePage() {
     refreshProfile() // Header: Gems (und ggf. Level) live aktualisieren
   }
 
-  if (loading) return <LoadingScreen />
+  if (loading) return <GameLoadingScreen />
   if (!image) return <div className="p-8 text-center text-white/50">Bild nicht gefunden.</div>
 
   const markers: ViewerMarker[] = []
@@ -236,18 +246,36 @@ export function ImageGamePage() {
         style={{ filter: blurred ? 'blur(16px)' : 'none', transition: 'filter 0.12s linear' }}
       >
         <ImageMarkerViewer
+          key={reloadKey}
           imageUrl={image.image_url}
           markers={markers}
           height="100%"
-          interactive={placing && !submitting}
-          onReady={(w, h) => setNat({ w, h })}
-          onTap={(x, y) => { if (placing && !submitting) setTip({ x, y }) }}
+          interactive={placing && begun && !submitting}
+          onReady={(w, h) => { setNat({ w, h }); setImgLoaded(true) }}
+          onError={() => setImgError(true)}
+          onTap={(x, y) => { if (placing && begun && !submitting) setTip({ x, y }) }}
         />
       </div>
 
-      {/* Sabotage-Hinweis vor dem Start (Debuffs liegen auf diesem Bild) */}
-      {placing && !begun && hasDebuffs && (
-        <SabotageScreen debuffs={debuffs} onStart={startRound} onBack={() => navigate(-1)} />
+      {/* Sabotage-Hinweis (erst nachdem das Bild geladen ist, damit es nicht durchscheint) */}
+      {placing && imgLoaded && !sabotageAck && hasDebuffs && (
+        <SabotageScreen debuffs={debuffs} onStart={() => setSabotageAck(true)} onBack={() => navigate(-1)} />
+      )}
+
+      {/* Allgemeiner Ladescreen: bleibt, bis das Bild sicher geladen ist */}
+      {!imgLoaded && !imgError && <GameLoadingScreen />}
+
+      {/* Bild konnte nicht geladen werden */}
+      {imgError && (
+        <div className="absolute inset-0 z-[60] bg-slate-950 flex flex-col items-center justify-center gap-4 p-8 text-center safe-top safe-area-pb">
+          <p className="text-5xl">📡</p>
+          <p className="text-white font-extrabold text-lg">Bild konnte nicht geladen werden</p>
+          <p className="text-white/50 text-sm">Prüfe deine Verbindung und versuch es nochmal.</p>
+          <div className="flex gap-3 mt-2">
+            <Button variant="secondary" onClick={() => navigate(-1)}>Zurück</Button>
+            <Button variant="success" onClick={() => { setImgError(false); setImgLoaded(false); setReloadKey(k => k + 1) }}>Erneut versuchen</Button>
+          </div>
+        </div>
       )}
 
       {/* Aktive Effekte während des Spielens */}
@@ -362,10 +390,16 @@ function SabotageScreen({ debuffs, onStart, onBack }: { debuffs: ActiveDebuff[];
   )
 }
 
-function LoadingScreen() {
+// Allgemeiner Ladescreen – bleibt sichtbar, bis das Bild-File sicher geladen ist.
+// Deckt sowohl das Laden der DB-Daten als auch das Herunterladen des Bildes ab.
+function GameLoadingScreen() {
   return (
-    <div className="h-full bg-black flex items-center justify-center">
-      <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+    <div className="fixed inset-0 z-[60] bg-slate-950 flex flex-col items-center justify-center gap-5 safe-top safe-area-pb">
+      <div className="w-14 h-14 border-[5px] border-violet-500 border-t-transparent rounded-full animate-spin" />
+      <div className="text-center">
+        <p className="text-white font-extrabold text-xl">Bild wird geladen …</p>
+        <p className="text-violet-300 font-bold mt-1">Viel Spaß! 🔍</p>
+      </div>
     </div>
   )
 }
