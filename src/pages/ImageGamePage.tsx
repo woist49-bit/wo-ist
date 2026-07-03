@@ -329,10 +329,11 @@ function EffectPill({ color, icon, label }: { color: string; icon: React.ReactNo
   )
 }
 
-// Warnscreen vor dem Bild, wenn Debuffs darauf warten ("Du wurdest sabotiert!")
+// Warnscreen vor dem Bild, wenn Debuffs darauf warten ("Du wurdest sabotiert!").
+// Deckend (bg-slate-950), damit man das Bild NICHT vorab durchschimmern sieht.
 function SabotageScreen({ debuffs, onStart, onBack }: { debuffs: ActiveDebuff[]; onStart: () => void; onBack: () => void }) {
   return (
-    <div className="absolute inset-0 z-40 bg-black/85 flex items-center justify-center p-6 safe-top safe-area-pb">
+    <div className="absolute inset-0 z-40 bg-slate-950 flex items-center justify-center p-6 safe-top safe-area-pb">
       <div className="w-full max-w-sm bg-slate-900 border-[3px] border-red-500 rounded-3xl p-6 text-center shadow-[0_0_40px_#ef444455] animate-pop-in">
         <div className="w-16 h-16 rounded-2xl bg-red-500 text-white flex items-center justify-center mx-auto mb-3 shadow-[0_4px_0_#b91c1c]">
           <Swords size={32} strokeWidth={2.5} />
