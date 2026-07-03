@@ -865,3 +865,31 @@ begin
     order by d.created_at;
 end;
 $$;
+
+-- =============================================
+-- SCHRITT 11: Lupe (Während-Runden-Item) – Phase 6
+-- =============================================
+
+-- Setzt die Lupe für ein Bild ein: zieht atomar EINE Lupe ab und merkt den Einsatz
+-- in player_image_items (erzwingt "nur einmal pro Bild", auch bei mehreren im Inventar).
+create or replace function use_magnifier(p_image_id uuid)
+returns void language plpgsql security definer as $$
+declare v_user uuid := auth.uid();
+begin
+  if v_user is null then raise exception 'NOT_AUTHENTICATED'; end if;
+  if not exists (select 1 from event_images where id = p_image_id and unlocks_at <= now()) then
+    raise exception 'IMAGE_LOCKED';
+  end if;
+  if exists (select 1 from player_attempts where image_id = p_image_id and user_id = v_user) then
+    raise exception 'ALREADY_PLAYED';
+  end if;
+  if exists (select 1 from player_image_items
+             where player_id = v_user and image_id = p_image_id and item_key = 'magnifier') then
+    raise exception 'ALREADY_USED';
+  end if;
+  update player_inventory set quantity = quantity - 1
+    where player_id = v_user and item_key = 'magnifier' and quantity > 0;
+  if not found then raise exception 'NOT_OWNED'; end if;
+  insert into player_image_items (player_id, image_id, item_key) values (v_user, p_image_id, 'magnifier');
+end;
+$$;

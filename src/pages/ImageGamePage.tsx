@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ChevronLeft, Swords, Zap, Hourglass } from 'lucide-react'
+import { ChevronLeft, Swords, Zap, Hourglass, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useNotifications } from '../stores/notifications'
+import { useToast } from '../stores/toast'
 import { calcPoints, isHit, distanceFraction, levelFromXp, effectiveElapsed, timeWarpRate } from '../lib/scoring'
 import { getShopItem } from '../lib/shop'
 import { Button } from '../components/ui/Button'
@@ -18,6 +19,7 @@ export function ImageGamePage() {
   const { worldId, imageId, campaignId } = useParams<{ worldId: string; imageId: string; campaignId: string }>()
   const { user, refreshProfile } = useAuth()
   const { triggerAchievement, triggerLevelUp } = useNotifications()
+  const { addToast } = useToast()
   const navigate = useNavigate()
   const isCampaign = !!campaignId
 
@@ -46,6 +48,12 @@ export function ImageGamePage() {
   const [sabotageAck, setSabotageAck] = useState(false) // "Trotzdem spielen" bestätigt?
   const [reloadKey, setReloadKey] = useState(0)       // erzwingt Neuladen des Bildes nach Fehler
 
+  // Phase 6: Lupe (Während-Runden-Item)
+  const [lupeCount, setLupeCount] = useState(0)       // verfügbare Lupen im Inventar
+  const [lupeUsed, setLupeUsed] = useState(false)     // für dieses Bild schon eingesetzt?
+  const [lupeBusy, setLupeBusy] = useState(false)
+  const [magMarker, setMagMarker] = useState<{ x_rel: number; y_rel: number } | null>(null)
+
   const startTimeRef = useRef<number>(Date.now())
 
   useEffect(() => { if (imageId && user) load() }, [imageId, user])
@@ -73,12 +81,16 @@ export function ImageGamePage() {
 
     // Aktive Items/Debuffs nur für einen frischen Live-Versuch laden
     if (!isCampaign && !attRes.data) {
-      const [armedRes, debuffRes] = await Promise.all([
+      const [armedRes, debuffRes, invRes] = await Promise.all([
         supabase.from('player_image_items').select('item_key').eq('image_id', imageId),
         supabase.rpc('my_image_debuffs', { p_image_id: imageId }),
+        supabase.from('player_inventory').select('quantity').eq('player_id', user!.id).eq('item_key', 'magnifier').maybeSingle(),
       ])
-      setArmed(new Set((armedRes.data ?? []).map(r => r.item_key)))
+      const armedKeys = (armedRes.data ?? []).map(r => r.item_key)
+      setArmed(new Set(armedKeys))
       setDebuffs((debuffRes.data ?? []) as ActiveDebuff[])
+      setLupeCount(invRes.data?.quantity ?? 0)
+      setLupeUsed(armedKeys.includes('magnifier')) // schon für dieses Bild eingesetzt?
     }
 
     // Timer startet NICHT hier – erst wenn das Bild-File geladen ist (Effekt unten)
@@ -116,6 +128,34 @@ export function ImageGamePage() {
     startTimeRef.current = Date.now()
     setElapsed(0)
     setBegun(true)
+  }
+
+  // Lupe einsetzen: serverseitig eine Lupe abziehen (einmal pro Bild), dann einen
+  // halbtransparenten Kreis leicht versetzt um die echte Position anzeigen.
+  async function useMagnifier() {
+    if (!image || !nat.w || lupeUsed || lupeBusy || lupeCount < 1) return
+    setLupeBusy(true)
+    const { error } = await supabase.rpc('use_magnifier', { p_image_id: image.id })
+    setLupeBusy(false)
+    if (error) {
+      const m = error.message || ''
+      const text = m.includes('ALREADY_USED') ? 'Die Lupe wurde für dieses Bild schon eingesetzt.'
+        : m.includes('NOT_OWNED') ? 'Du besitzt keine Lupe mehr.'
+        : `Lupe konnte nicht eingesetzt werden: ${m}`
+      addToast(text, 'error', 6000)
+      return
+    }
+    // Kreis (Radius ~15% der Bildbreite) leicht versetzt -> nicht exakt auf der Person
+    const radiusPx = 0.15 * nat.w
+    const ang = Math.random() * Math.PI * 2
+    const dist = radiusPx * (0.25 + Math.random() * 0.35) // 25–60% des Radius versetzt (Ziel bleibt drin)
+    const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
+    setMagMarker({
+      x_rel: clamp01(image.target_x + (dist * Math.cos(ang)) / nat.w),
+      y_rel: clamp01(image.target_y + (dist * Math.sin(ang)) / nat.h),
+    })
+    setLupeUsed(true)
+    setLupeCount(c => c - 1)
   }
 
   // Runde startet, sobald das Bild geladen ist UND (keine Debuffs ODER Sabotage-Hinweis bestätigt).
@@ -234,6 +274,10 @@ export function ImageGamePage() {
   if (!image) return <div className="p-8 text-center text-white/50">Bild nicht gefunden.</div>
 
   const markers: ViewerMarker[] = []
+  // Lupen-Kreis (Radius ~15% der Bildbreite) zuerst -> Tipp-Pin liegt oben drauf
+  if (placing && magMarker && nat.w) {
+    markers.push({ x_rel: magMarker.x_rel, y_rel: magMarker.y_rel, radius_px: 0.15 * nat.w, variant: 'ring', color: '#38bdf8' })
+  }
   if (placing && tip) markers.push({ x_rel: tip.x, y_rel: tip.y, variant: 'pin', color: '#818cf8' })
   if (revealed && nat.w) {
     const shorter = Math.min(nat.w, nat.h)
@@ -288,6 +332,20 @@ export function ImageGamePage() {
           {timerStacks > 0 && <EffectPill color="bg-red-500" icon={<Swords size={13} strokeWidth={2.5} />} label={`Timer ×${timerStacks}`} />}
           {blurStacks > 0 && <EffectPill color="bg-red-500" icon={<Swords size={13} strokeWidth={2.5} />} label={`Unschärfe ×${blurStacks}`} />}
         </div>
+      )}
+
+      {/* Lupe (Während-Runden-Item): direkt unter dem Timer, oben rechts */}
+      {placing && begun && !lupeUsed && lupeCount > 0 && (
+        <button
+          onClick={useMagnifier}
+          disabled={lupeBusy}
+          className="absolute right-3 z-30 flex items-center gap-1.5 bg-sky-500 text-white font-extrabold pl-3 pr-3.5 py-2 rounded-2xl shadow-[0_4px_0_#0369a1,inset_0_2px_0_#ffffff4d] active:translate-y-[2px] active:shadow-[0_2px_0_#0369a1] disabled:opacity-60 touch-manipulation select-none"
+          style={{ top: 'calc(env(safe-area-inset-top) + 4.25rem)' }}
+          aria-label="Lupe einsetzen"
+        >
+          <Search size={18} strokeWidth={2.5} />
+          <span className="text-sm">×{lupeCount}</span>
+        </button>
       )}
 
       {/* Top-Leiste: Zurück + Timer-Badge */}
