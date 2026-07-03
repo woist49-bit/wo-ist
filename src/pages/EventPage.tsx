@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Search, Clock } from 'lucide-react'
+import { Search, Clock, Lock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useNow } from '../hooks/useNow'
 import { levelFromXp } from '../lib/scoring'
-import { formatCountdown, relativeDay, IMAGE_PLAY_WINDOW_MS } from '../lib/time'
+import { formatCountdown, IMAGE_PLAY_WINDOW_MS } from '../lib/time'
 import { GameCard } from '../components/ui/GameCard'
+import { EventImagePopup, type ImageStatus } from '../components/event/EventImagePopup'
 import type { LiveEvent, EventImage, PlayerAttempt, EventLeaderboardEntry } from '../types'
 
 export function EventPage() {
@@ -18,18 +19,21 @@ export function EventPage() {
   const [images, setImages] = useState<EventImage[]>([])
   const [attempts, setAttempts] = useState<Map<string, PlayerAttempt>>(new Map())
   const [board, setBoard] = useState<EventLeaderboardEntry[]>([])
+  const [inventory, setInventory] = useState<Map<string, number>>(new Map())
+  const [popupImg, setPopupImg] = useState<EventImage | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { if (eventId && user) load() }, [eventId, user])
 
   async function load() {
-    const [evRes, imgRes, attRes, boardRes] = await Promise.all([
+    const [evRes, imgRes, attRes, boardRes, invRes] = await Promise.all([
       supabase.from('live_events').select('*').eq('id', eventId).single(),
       supabase.from('event_images').select('*').eq('event_id', eventId).order('unlocks_at', { ascending: true }).order('sort_order', { ascending: true }),
       supabase.from('player_attempts').select('*').eq('user_id', user!.id).in('image_id',
         (await supabase.from('event_images').select('id').eq('event_id', eventId)).data?.map(r => r.id) ?? []
       ),
       supabase.rpc('event_leaderboard', { p_event_id: eventId }),
+      supabase.from('player_inventory').select('item_key, quantity').eq('player_id', user!.id),
     ])
     setEvent(evRes.data)
     setImages((imgRes.data ?? []) as EventImage[])
@@ -37,14 +41,20 @@ export function EventPage() {
     for (const a of attRes.data ?? []) map.set(a.image_id, a)
     setAttempts(map)
     setBoard(boardRes.data ?? [])
+    setInventory(new Map((invRes.data ?? []).map(r => [r.item_key, r.quantity])))
     setLoading(false)
+  }
+
+  // Inventar allein neu laden (nach Debuff-Einsatz, ohne das ganze Popup zu schließen)
+  async function reloadInventory() {
+    const { data } = await supabase.from('player_inventory').select('item_key, quantity').eq('player_id', user!.id)
+    setInventory(new Map((data ?? []).map(r => [r.item_key, r.quantity])))
   }
 
   if (loading) return <LoadingScreen />
   if (!event) return <div className="p-8 text-center text-white/50">Event nicht gefunden.</div>
 
   const totalPoints = Array.from(attempts.values()).reduce((s, a) => s + a.points, 0)
-  const unlockedImages = images.filter(img => new Date(img.unlocks_at).getTime() <= now)
   const nextImage = images
     .filter(img => new Date(img.unlocks_at).getTime() > now)
     .sort((a, b) => new Date(a.unlocks_at).getTime() - new Date(b.unlocks_at).getTime())[0] ?? null
@@ -60,47 +70,63 @@ export function EventPage() {
         Deine Punkte: {totalPoints.toLocaleString()}
       </div>
 
-      {unlockedImages.length === 0 ? (
+      {images.length === 0 ? (
         <GameCard className="text-center py-12 text-slate-400">
           <p className="text-4xl mb-3">⏳</p>
-          <p className="font-semibold">Noch kein Bild freigeschaltet.</p>
+          <p className="font-semibold">Noch keine Bilder in diesem Event.</p>
         </GameCard>
       ) : (
         <div className="flex flex-col gap-3">
-          {unlockedImages.map((img, idx) => {
+          {images.map((img, idx) => {
             const att = attempts.get(img.id)
             const played = !!att
-            const remaining = new Date(img.unlocks_at).getTime() + IMAGE_PLAY_WINDOW_MS - now
-            const expired = remaining <= 0
+            const unlockMs = new Date(img.unlocks_at).getTime()
+            const locked = unlockMs > now
+            const remaining = unlockMs + IMAGE_PLAY_WINDOW_MS - now
+            const expired = !locked && remaining <= 0
             const remainColor = expired ? 'text-slate-400' : remaining < 3600000 ? 'text-amber-600' : 'text-emerald-600'
             return (
               <button
                 key={img.id}
-                onClick={() => navigate(`/world/${worldId}/event/${eventId}/image/${img.id}`)}
+                onClick={() => setPopupImg(img)}
                 className="w-full text-left active:translate-y-[2px] transition-transform"
               >
-                <GameCard className={played ? '' : expired ? 'opacity-70' : '!border-violet-400'}>
+                <GameCard className={played ? '' : locked ? '' : expired ? 'opacity-70' : '!border-violet-400'}>
                   <div className="flex items-center gap-4">
-                    <div className="relative w-20 h-14 rounded-xl overflow-hidden bg-slate-300 flex-shrink-0">
-                      <img src={img.image_url} alt="" className="w-full h-full object-cover" />
-                      {!played && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 text-white">
-                          <Search size={20} strokeWidth={2.5} />
-                        </div>
+                    <div className="relative w-20 h-14 rounded-xl overflow-hidden bg-slate-300 flex-shrink-0 flex items-center justify-center">
+                      {locked ? (
+                        <Lock size={22} strokeWidth={2.5} className="text-slate-500" />
+                      ) : (
+                        <>
+                          <img src={img.image_url} alt="" className="w-full h-full object-cover" />
+                          {!played && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/30 text-white">
+                              <Search size={20} strokeWidth={2.5} />
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-extrabold text-slate-800">Bild {idx + 1}</p>
-                      {img.description && <p className="text-xs text-slate-600 mt-0.5 line-clamp-2">{img.description}</p>}
-                      <p className="text-xs text-slate-500 mt-0.5">Freigeschaltet: {formatDate(img.unlocks_at)}</p>
-                      {!played && (
-                        <p className={`text-xs font-bold mt-0.5 ${remainColor}`}>
-                          {expired ? 'Abgelaufen' : `Noch ${formatCountdown(remaining)} spielbar`}
-                        </p>
+                      {locked ? (
+                        <p className="text-xs font-bold mt-0.5 text-violet-600">Freigeschaltet in {formatCountdown(unlockMs - now)}</p>
+                      ) : (
+                        <>
+                          {img.description && <p className="text-xs text-slate-600 mt-0.5 line-clamp-2">{img.description}</p>}
+                          <p className="text-xs text-slate-500 mt-0.5">Freigeschaltet: {formatDate(img.unlocks_at)}</p>
+                          {!played && (
+                            <p className={`text-xs font-bold mt-0.5 ${remainColor}`}>
+                              {expired ? 'Abgelaufen' : `Noch ${formatCountdown(remaining)} spielbar`}
+                            </p>
+                          )}
+                        </>
                       )}
                     </div>
                     <div className="text-right flex-shrink-0 text-sm font-bold">
-                      {played ? (
+                      {locked ? (
+                        <span className="text-slate-400 inline-flex items-center gap-1"><Lock size={14} strokeWidth={2.5} /> Gesperrt</span>
+                      ) : played ? (
                         att.is_correct ? (
                           <>
                             <span className="text-green-600">+{att.points}</span>
@@ -123,19 +149,9 @@ export function EventPage() {
         </div>
       )}
 
-      {/* Info zum nächsten Bild bzw. Event-Ende */}
-      {images.length > 0 && (
-        nextImage ? (
-          <GameCard className="mt-4 !py-3">
-            <div className="flex items-center gap-3">
-              <Clock size={20} strokeWidth={2.5} className="text-violet-500 flex-shrink-0" />
-              <p className="text-sm font-semibold text-slate-700">
-                Nächstes Bild {relativeDay(new Date(nextImage.unlocks_at), new Date(now))} um {timeOf(nextImage.unlocks_at)} Uhr
-                <span className="text-slate-400"> · in {formatCountdown(new Date(nextImage.unlocks_at).getTime() - now)}</span>
-              </p>
-            </div>
-          </GameCard>
-        ) : !trulyOver ? (
+      {/* Event-Ende-Hinweis (nur wenn kein gesperrtes Bild mehr aussteht) */}
+      {images.length > 0 && !nextImage && (
+        !trulyOver ? (
           <GameCard className="mt-4 !py-3">
             <div className="flex items-center gap-3">
               <Clock size={20} strokeWidth={2.5} className="text-violet-500 flex-shrink-0" />
@@ -179,6 +195,25 @@ export function EventPage() {
           })}
         </div>
       )}
+
+      {popupImg && (() => {
+        const att = attempts.get(popupImg.id) ?? null
+        const status: ImageStatus = att ? 'played' : new Date(popupImg.unlocks_at).getTime() > now ? 'locked' : 'open'
+        const idx = images.findIndex(i => i.id === popupImg.id)
+        return (
+          <EventImagePopup
+            image={popupImg}
+            index={idx}
+            status={status}
+            attempt={att}
+            inventory={inventory}
+            onClose={() => setPopupImg(null)}
+            onPlay={() => navigate(`/world/${worldId}/event/${eventId}/image/${popupImg.id}`)}
+            onViewResult={() => navigate(`/world/${worldId}/event/${eventId}/image/${popupImg.id}`)}
+            onChanged={reloadInventory}
+          />
+        )
+      })()}
     </div>
   )
 }
@@ -188,10 +223,6 @@ const rankBadge = (idx: number) =>
   : idx === 1 ? 'bg-slate-300 text-slate-700'
   : idx === 2 ? 'bg-amber-600 text-white'
   : 'bg-slate-200 text-slate-500'
-
-function timeOf(iso: string) {
-  return new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
-}
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })

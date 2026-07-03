@@ -58,3 +58,12 @@ export const SHOP_ITEMS: ShopItem[] = [
     description: 'Das Bild eines anderen Spielers flackert in den ersten 10 Sekunden dreimal unscharf je circa 1 Sekunde. Nur auf gesperrte Bilder einsetzbar.',
   },
 ]
+
+export const SHOP_ITEM_MAP: Record<string, ShopItem> = Object.fromEntries(SHOP_ITEMS.map(i => [i.key, i]))
+
+export const getShopItem = (key: string): ShopItem | undefined => SHOP_ITEM_MAP[key]
+
+// Item-Keys nach Kategorie (müssen mit den serverseitigen RPCs übereinstimmen)
+export const PRE_ROUND_ITEM_KEYS = SHOP_ITEMS.filter(i => i.category === 'pre').map(i => i.key)
+export const DEBUFF_ITEM_KEYS = SHOP_ITEMS.filter(i => i.category === 'debuff').map(i => i.key)
+export const DURING_ITEM_KEYS = SHOP_ITEMS.filter(i => i.category === 'during').map(i => i.key)

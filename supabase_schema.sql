@@ -678,3 +678,153 @@ begin
   return v_qty;
 end;
 $$;
+
+-- =============================================
+-- SCHRITT 10: Item-Einsatz im Live-Event – Phase 4
+-- Vor-Runden-Items werden beim Tippen auf "Spielen" scharf gestellt (abgezogen),
+-- Debuffs nur auf noch gesperrte Bilder gegen Spieler, die noch nicht gespielt haben.
+-- Alles serverseitig + validiert; das Frontend zieht nie selbst Items/Gems ab.
+-- =============================================
+
+-- Scharf gestellte Vor-Runden-Items pro Spieler und Bild (double_points, slow_motion).
+-- Effekte selbst kommen in Phase 5 – hier wird nur der Einsatz verbucht.
+create table if not exists player_image_items (
+  player_id uuid not null references profiles(id) on delete cascade,
+  image_id uuid not null references event_images(id) on delete cascade,
+  item_key text not null,
+  created_at timestamptz not null default now(),
+  primary key (player_id, image_id, item_key)
+);
+alter table player_image_items enable row level security;
+create policy "own image items select" on player_image_items for select using (auth.uid() = player_id);
+
+-- Debuffs, die ein Spieler auf das (noch gesperrte) Bild eines anderen legt.
+create table if not exists debuffs (
+  id uuid primary key default gen_random_uuid(),
+  sender_id uuid not null references profiles(id) on delete cascade,
+  target_player_id uuid not null references profiles(id) on delete cascade,
+  image_id uuid not null references event_images(id) on delete cascade,
+  debuff_type text not null,               -- 'timer_debuff' | 'blur_debuff'
+  stacks integer not null default 1,
+  consumed boolean not null default false,
+  created_at timestamptz not null default now(),
+  unique (sender_id, target_player_id, image_id, debuff_type)
+);
+alter table debuffs enable row level security;
+-- Sichtbar für Absender (was habe ich verschickt) und Ziel (was liegt auf mir)
+create policy "sender or target views debuff" on debuffs for select
+  using (auth.uid() = sender_id or auth.uid() = target_player_id);
+
+-- Stellt Vor-Runden-Items für ein freigeschaltetes, noch nicht gespieltes Bild scharf.
+-- Zieht jedes Item genau einmal aus dem Inventar ab (idempotent: bereits scharf gestellte
+-- Items werden nicht erneut abgezogen, falls der Spieler zurückgeht und neu "Spielen" tippt).
+create or replace function arm_pre_round_items(p_image_id uuid, p_item_keys text[])
+returns void language plpgsql security definer as $$
+declare
+  v_user uuid := auth.uid();
+  v_key text;
+  v_pre text[] := array['double_points', 'slow_motion'];
+begin
+  if v_user is null then raise exception 'NOT_AUTHENTICATED'; end if;
+  if not exists (select 1 from event_images where id = p_image_id and unlocks_at <= now()) then
+    raise exception 'IMAGE_LOCKED';
+  end if;
+  if exists (select 1 from player_attempts where image_id = p_image_id and user_id = v_user) then
+    raise exception 'ALREADY_PLAYED';
+  end if;
+
+  foreach v_key in array coalesce(p_item_keys, '{}'::text[]) loop
+    if not (v_key = any(v_pre)) then continue; end if;                    -- nur Vor-Runden-Items
+    -- schon scharf gestellt? -> nicht erneut abziehen
+    if exists (select 1 from player_image_items
+               where player_id = v_user and image_id = p_image_id and item_key = v_key) then
+      continue;
+    end if;
+    update player_inventory set quantity = quantity - 1
+      where player_id = v_user and item_key = v_key and quantity > 0;
+    if not found then raise exception 'NOT_OWNED:%', v_key; end if;
+    insert into player_image_items (player_id, image_id, item_key) values (v_user, p_image_id, v_key);
+  end loop;
+end;
+$$;
+
+-- Setzt einen Debuff gegen einen Zielspieler auf ein noch gesperrtes Bild.
+-- Prüft: Bild noch gesperrt, Ziel ist Mitglied derselben Welt und hat noch nicht gespielt,
+-- Absender besitzt das Debuff-Item. Zieht das Item ab. Gleicher Absender+Zi+Typ -> Stapel +1.
+create or replace function cast_debuff(p_image_id uuid, p_target_player_id uuid, p_debuff_type text)
+returns void language plpgsql security definer as $$
+declare
+  v_user uuid := auth.uid();
+  v_world uuid;
+begin
+  if v_user is null then raise exception 'NOT_AUTHENTICATED'; end if;
+  if p_debuff_type not in ('timer_debuff', 'blur_debuff') then raise exception 'UNKNOWN_DEBUFF'; end if;
+  if p_target_player_id = v_user then raise exception 'NO_SELF_TARGET'; end if;
+
+  select coalesce(ei.world_id, le.world_id) into v_world
+  from event_images ei left join live_events le on le.id = ei.event_id
+  where ei.id = p_image_id and ei.unlocks_at > now();     -- Bild muss noch gesperrt sein
+  if v_world is null then raise exception 'IMAGE_NOT_LOCKED'; end if;
+
+  if not exists (select 1 from world_members where world_id = v_world and user_id = v_user) then
+    raise exception 'NOT_A_MEMBER';
+  end if;
+  if not exists (select 1 from world_members where world_id = v_world and user_id = p_target_player_id) then
+    raise exception 'TARGET_NOT_MEMBER';
+  end if;
+  if exists (select 1 from player_attempts where image_id = p_image_id and user_id = p_target_player_id) then
+    raise exception 'TARGET_ALREADY_PLAYED';
+  end if;
+
+  update player_inventory set quantity = quantity - 1
+    where player_id = v_user and item_key = p_debuff_type and quantity > 0;
+  if not found then raise exception 'NOT_OWNED'; end if;
+
+  insert into debuffs (sender_id, target_player_id, image_id, debuff_type, stacks)
+  values (v_user, p_target_player_id, p_image_id, p_debuff_type, 1)
+  on conflict (sender_id, target_player_id, image_id, debuff_type)
+    do update set stacks = debuffs.stacks + 1, consumed = false;
+end;
+$$;
+
+-- Mögliche Debuff-Ziele für ein Bild: Mitglieder derselben Welt (außer mir),
+-- die dieses Bild noch NICHT gespielt haben. Security-Definer, weil player_attempts
+-- fremder Spieler sonst nicht lesbar sind. Nur für Mitglieder der Welt.
+create or replace function image_debuff_targets(p_image_id uuid)
+returns table (user_id uuid, username text, avatar_url text)
+language plpgsql security definer as $$
+declare
+  v_user uuid := auth.uid();
+  v_world uuid;
+begin
+  select coalesce(ei.world_id, le.world_id) into v_world
+  from event_images ei left join live_events le on le.id = ei.event_id
+  where ei.id = p_image_id;
+  if v_world is null then return; end if;
+  if not exists (select 1 from world_members where world_id = v_world and user_id = v_user) then return; end if;
+
+  return query
+    select p.id, p.username, p.avatar_url
+    from world_members wm
+    join profiles p on p.id = wm.user_id
+    where wm.world_id = v_world
+      and wm.user_id <> v_user
+      and not exists (select 1 from player_attempts pa
+                      where pa.image_id = p_image_id and pa.user_id = wm.user_id)
+    order by p.username;
+end;
+$$;
+
+-- Debuffs, die auf MIR für ein Bild liegen – inkl. Absender-Name (für den "bereits gespielt"-Zustand).
+create or replace function my_image_debuffs(p_image_id uuid)
+returns table (debuff_type text, stacks integer, sender_username text)
+language plpgsql security definer as $$
+declare v_user uuid := auth.uid();
+begin
+  return query
+    select d.debuff_type, d.stacks, p.username
+    from debuffs d join profiles p on p.id = d.sender_id
+    where d.image_id = p_image_id and d.target_player_id = v_user
+    order by d.created_at;
+end;
+$$;
