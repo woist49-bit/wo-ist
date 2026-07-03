@@ -801,7 +801,9 @@ begin
   from event_images ei left join live_events le on le.id = ei.event_id
   where ei.id = p_image_id;
   if v_world is null then return; end if;
-  if not exists (select 1 from world_members where world_id = v_world and user_id = v_user) then return; end if;
+  -- wm-Alias + qualifizierte Spalten: sonst kollidiert user_id mit der gleichnamigen
+  -- OUT-Spalte der RETURNS TABLE (Postgres: "column reference user_id is ambiguous").
+  if not exists (select 1 from world_members wm where wm.world_id = v_world and wm.user_id = v_user) then return; end if;
 
   return query
     select p.id, p.username, p.avatar_url

@@ -84,7 +84,15 @@ export function EventImagePopup({ image, index, status, attempt, inventory, onCl
     setSelectedTarget(null)
     setTargets(null)
     const { data, error } = await supabase.rpc('image_debuff_targets', { p_image_id: image.id })
-    if (error) { addToast('Zielspieler konnten nicht geladen werden.', 'error'); return }
+    if (error) {
+      const m = error.message || ''
+      const text = /image_debuff_targets|schema cache|does not exist|PGRST202/i.test(m)
+        ? 'Zielspieler-Funktion fehlt – ist das Phase-4-SQL in Supabase ausgeführt?'
+        : `Zielspieler konnten nicht geladen werden: ${m}`
+      addToast(text, 'error', 7000)
+      setTargets([])
+      return
+    }
     setTargets((data ?? []) as TargetPlayer[])
   }
 
