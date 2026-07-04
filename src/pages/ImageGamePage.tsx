@@ -15,6 +15,10 @@ import type { EventImage, PlayerAttempt } from '../types'
 
 interface ActiveDebuff { debuff_type: string; stacks: number; sender_username: string }
 
+const HALF_LABEL: Record<'left' | 'right' | 'top' | 'bottom', string> = {
+  left: 'linken Hälfte', right: 'rechten Hälfte', top: 'oberen Hälfte', bottom: 'unteren Hälfte',
+}
+
 export function ImageGamePage() {
   const { worldId, imageId, campaignId } = useParams<{ worldId: string; imageId: string; campaignId: string }>()
   const { user, refreshProfile } = useAuth()
@@ -52,7 +56,7 @@ export function ImageGamePage() {
   const [lupeCount, setLupeCount] = useState(0)       // verfügbare Lupen im Inventar
   const [lupeUsed, setLupeUsed] = useState(false)     // für dieses Bild schon eingesetzt?
   const [lupeBusy, setLupeBusy] = useState(false)
-  const [magMarker, setMagMarker] = useState<{ x_rel: number; y_rel: number } | null>(null)
+  const [magHalf, setMagHalf] = useState<'left' | 'right' | 'top' | 'bottom' | null>(null)
 
   const startTimeRef = useRef<number>(Date.now())
 
@@ -145,15 +149,13 @@ export function ImageGamePage() {
       addToast(text, 'error', 6000)
       return
     }
-    // Kreis (Radius ~15% der Bildbreite) leicht versetzt -> nicht exakt auf der Person
-    const radiusPx = 0.15 * nat.w
-    const ang = Math.random() * Math.PI * 2
-    const dist = radiusPx * (0.25 + Math.random() * 0.35) // 25–60% des Radius versetzt (Ziel bleibt drin)
-    const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
-    setMagMarker({
-      x_rel: clamp01(image.target_x + (dist * Math.cos(ang)) / nat.w),
-      y_rel: clamp01(image.target_y + (dist * Math.sin(ang)) / nat.h),
-    })
+    // Grober Tipp: nur die Bildhälfte, in der die Person ist. Teilung entlang der
+    // längeren Bildseite (Querformat -> links/rechts, Hochformat -> oben/unten).
+    const landscape = nat.w >= nat.h
+    const half = landscape
+      ? (image.target_x < 0.5 ? 'left' : 'right')
+      : (image.target_y < 0.5 ? 'top' : 'bottom')
+    setMagHalf(half)
     setLupeUsed(true)
     setLupeCount(c => c - 1)
   }
@@ -274,9 +276,15 @@ export function ImageGamePage() {
   if (!image) return <div className="p-8 text-center text-white/50">Bild nicht gefunden.</div>
 
   const markers: ViewerMarker[] = []
-  // Lupen-Kreis (Radius ~15% der Bildbreite) zuerst -> Tipp-Pin liegt oben drauf
-  if (placing && magMarker && nat.w) {
-    markers.push({ x_rel: magMarker.x_rel, y_rel: magMarker.y_rel, radius_px: 0.15 * nat.w, variant: 'ring', color: '#38bdf8' })
+  // Lupe: die HÄLFTE ohne die Person abdunkeln (grober Tipp) -> zuerst, damit der Pin oben liegt
+  if (placing && magHalf && nat.w) {
+    const dim = 'rgba(2,6,23,0.62)'
+    const region =
+      magHalf === 'left' ? { x_rel: 0.5, y_rel: 0, w_rel: 0.5, h_rel: 1 }   // Person links -> rechts abdunkeln
+      : magHalf === 'right' ? { x_rel: 0, y_rel: 0, w_rel: 0.5, h_rel: 1 }
+      : magHalf === 'top' ? { x_rel: 0, y_rel: 0.5, w_rel: 1, h_rel: 0.5 }
+      : { x_rel: 0, y_rel: 0, w_rel: 1, h_rel: 0.5 }
+    markers.push({ ...region, variant: 'region', color: dim })
   }
   if (placing && tip) markers.push({ x_rel: tip.x, y_rel: tip.y, variant: 'pin', color: '#818cf8' })
   if (revealed && nat.w) {
@@ -346,6 +354,15 @@ export function ImageGamePage() {
           <Search size={18} strokeWidth={2.5} />
           <span className="text-sm">×{lupeCount}</span>
         </button>
+      )}
+
+      {/* Lupen-Hinweis: in welcher Hälfte die Person ist */}
+      {placing && begun && magHalf && (
+        <div className="absolute inset-x-0 z-20 flex justify-center px-3 pointer-events-none" style={{ top: 'calc(env(safe-area-inset-top) + 7rem)' }}>
+          <span className="inline-flex items-center gap-1.5 bg-sky-500 text-white text-sm font-extrabold px-3 py-1.5 rounded-full shadow-[0_3px_0_#0369a1]">
+            <Search size={14} strokeWidth={2.5} /> Person in der {HALF_LABEL[magHalf]}
+          </span>
+        </div>
       )}
 
       {/* Top-Leiste: Zurück + Timer-Badge */}

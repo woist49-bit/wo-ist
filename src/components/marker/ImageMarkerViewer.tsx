@@ -1,11 +1,13 @@
 import { useRef, useState, useEffect } from 'react'
 
 export interface ViewerMarker {
-  x_rel: number        // 0..1 der natürlichen Bildbreite
+  x_rel: number        // 0..1 der natürlichen Bildbreite (bei 'region': linke obere Ecke)
   y_rel: number        // 0..1 der natürlichen Bildhöhe
   radius_px?: number   // Radius in NATÜRLICHEN Bildpixeln -> wenn gesetzt, wird ein Kreis gezeichnet
-  variant: 'pin' | 'ring'
-  color: string        // 6-stelliger Hex, z. B. '#22c55e'
+  w_rel?: number       // nur 'region': Breite als Anteil der Bildbreite
+  h_rel?: number       // nur 'region': Höhe als Anteil der Bildhöhe
+  variant: 'pin' | 'ring' | 'region'
+  color: string        // 6-stelliger Hex ('pin'/'ring') bzw. beliebige CSS-Farbe/rgba ('region')
   pulse?: boolean
 }
 
@@ -249,6 +251,18 @@ export function ImageMarkerViewer({
       {ready && markers.map((m, i) => {
         const sx = m.x_rel * nat.w * zoom + pan.x
         const sy = m.y_rel * nat.h * zoom + pan.y
+        if (m.variant === 'region' && m.w_rel != null && m.h_rel != null) {
+          return (
+            <div
+              key={i}
+              style={{
+                position: 'absolute', left: sx, top: sy,
+                width: m.w_rel * nat.w * zoom, height: m.h_rel * nat.h * zoom,
+                background: m.color, pointerEvents: 'none',
+              }}
+            />
+          )
+        }
         if (m.variant === 'ring' && m.radius_px != null) {
           const d = m.radius_px * zoom * 2
           return (
