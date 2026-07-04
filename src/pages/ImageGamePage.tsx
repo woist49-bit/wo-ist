@@ -160,6 +160,13 @@ export function ImageGamePage() {
     setLupeCount(c => c - 1)
   }
 
+  // Die Hälfte-Anzeige nur kurz zeigen (2s), dann wieder ausblenden
+  useEffect(() => {
+    if (!magHalf) return
+    const t = setTimeout(() => setMagHalf(null), 2000)
+    return () => clearTimeout(t)
+  }, [magHalf])
+
   // Runde startet, sobald das Bild geladen ist UND (keine Debuffs ODER Sabotage-Hinweis bestätigt).
   // So läuft der Timer garantiert erst, wenn der Spieler das Bild wirklich sieht.
   useEffect(() => {
