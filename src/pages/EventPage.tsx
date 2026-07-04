@@ -4,16 +4,26 @@ import { Search, Clock, Lock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useNow } from '../hooks/useNow'
+import { useToast } from '../stores/toast'
 import { levelFromXp } from '../lib/scoring'
+import { getShopItem } from '../lib/shop'
 import { formatCountdown, IMAGE_PLAY_WINDOW_MS } from '../lib/time'
 import { GameCard } from '../components/ui/GameCard'
 import { Avatar } from '../components/ui/Avatar'
 import { EventImagePopup, type ImageStatus } from '../components/event/EventImagePopup'
 import type { LiveEvent, EventImage, PlayerAttempt, EventLeaderboardEntry } from '../types'
 
+// Aggregierte Item-/Debuff-Anzeige pro Spieler (über alle Bilder des Events)
+interface UserItemAgg {
+  items: { key: string; count: number }[]                       // grün: selbst eingesetzt
+  debuffs: { type: string; count: number; senders: string[] }[] // rot: von anderen erhalten
+}
+interface ItemLogRow { user_id: string; items_used: string[] | null; debuffs_received: { debuff_type: string; stacks: number; sender: string }[] | null }
+
 export function EventPage() {
   const { worldId, eventId } = useParams<{ worldId: string; eventId: string }>()
   const { user } = useAuth()
+  const { addToast } = useToast()
   const navigate = useNavigate()
   const now = useNow(1000)
   const [event, setEvent] = useState<LiveEvent | null>(null)
@@ -22,13 +32,14 @@ export function EventPage() {
   const [board, setBoard] = useState<EventLeaderboardEntry[]>([])
   const [inventory, setInventory] = useState<Map<string, number>>(new Map())
   const [avatars, setAvatars] = useState<Map<string, string | null>>(new Map())
+  const [itemLog, setItemLog] = useState<Map<string, UserItemAgg>>(new Map())
   const [popupImg, setPopupImg] = useState<EventImage | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { if (eventId && user) load() }, [eventId, user])
 
   async function load() {
-    const [evRes, imgRes, attRes, boardRes, invRes] = await Promise.all([
+    const [evRes, imgRes, attRes, boardRes, invRes, logRes] = await Promise.all([
       supabase.from('live_events').select('*').eq('id', eventId).single(),
       supabase.from('event_images').select('*').eq('event_id', eventId).order('unlocks_at', { ascending: true }).order('sort_order', { ascending: true }),
       supabase.from('player_attempts').select('*').eq('user_id', user!.id).in('image_id',
@@ -36,6 +47,7 @@ export function EventPage() {
       ),
       supabase.rpc('event_leaderboard', { p_event_id: eventId }),
       supabase.from('player_inventory').select('item_key, quantity').eq('player_id', user!.id),
+      supabase.rpc('event_item_log', { p_event_id: eventId }),
     ])
     setEvent(evRes.data)
     setImages((imgRes.data ?? []) as EventImage[])
@@ -54,6 +66,9 @@ export function EventPage() {
       for (const p of profs ?? []) m.set(p.id, p.avatar_url)
       setAvatars(m)
     }
+
+    // Item-Log (Phase 7) pro Spieler über alle Bilder aggregieren
+    setItemLog(aggregateItemLog((logRes.data ?? []) as ItemLogRow[]))
     setLoading(false)
   }
 
@@ -187,11 +202,12 @@ export function EventPage() {
           {board.map((entry, idx) => {
             const isMe = entry.user_id === user?.id
             const { level } = levelFromXp(entry.xp)
+            const agg = itemLog.get(entry.user_id)
             return (
-              <button
+              <div
                 key={entry.user_id}
                 onClick={() => navigate(`/world/${worldId}/profile/${entry.user_id}`)}
-                className="w-full text-left active:translate-y-[2px] transition-transform"
+                className="w-full text-left active:translate-y-[2px] transition-transform cursor-pointer"
               >
                 <GameCard className={`!py-3 ${isMe ? '!border-violet-400' : ''}`}>
                   <div className="flex items-center gap-3">
@@ -207,11 +223,30 @@ export function EventPage() {
                         {isMe && <span className="text-xs text-slate-400 flex-shrink-0">(Du)</span>}
                       </div>
                       <p className="text-xs text-slate-500 mt-0.5">Lvl {level} · {entry.finds} {entry.finds === 1 ? 'Fund' : 'Funde'}</p>
+                      {agg && (agg.items.length > 0 || agg.debuffs.length > 0) && (
+                        <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                          {agg.items.map(it => (
+                            <ItemChip
+                              key={`i-${it.key}`} itemKey={it.key} count={it.count} tone="good"
+                              onTap={() => addToast(`${getShopItem(it.key)?.name ?? it.key}${it.count > 1 ? ` ×${it.count}` : ''} eingesetzt`, 'info', 4000)}
+                            />
+                          ))}
+                          {agg.debuffs.map(d => {
+                            const senders = Array.from(new Set(d.senders))
+                            return (
+                              <ItemChip
+                                key={`d-${d.type}`} itemKey={d.type} count={d.count} tone="bad"
+                                onTap={() => addToast(`${getShopItem(d.type)?.name ?? d.type}${d.count > 1 ? ` ×${d.count}` : ''}${senders.length ? ` von ${senders.join(', ')}` : ''}`, 'info', 5000)}
+                              />
+                            )
+                          })}
+                        </div>
+                      )}
                     </div>
                     <p className="font-extrabold text-slate-800 text-lg flex-shrink-0">{entry.total_points.toLocaleString()}</p>
                   </div>
                 </GameCard>
-              </button>
+              </div>
             )
           })}
         </div>
@@ -244,6 +279,47 @@ const rankBadge = (idx: number) =>
   : idx === 1 ? 'bg-slate-300 text-slate-700'
   : idx === 2 ? 'bg-amber-600 text-white'
   : 'bg-slate-200 text-slate-500'
+
+// Rohe Item-Logs (eine Zeile pro Spieler+Bild) zu einer Übersicht pro Spieler zusammenfassen
+function aggregateItemLog(rows: ItemLogRow[]): Map<string, UserItemAgg> {
+  const acc = new Map<string, { items: Map<string, number>; debuffs: Map<string, { count: number; senders: string[] }> }>()
+  for (const row of rows) {
+    let e = acc.get(row.user_id)
+    if (!e) { e = { items: new Map(), debuffs: new Map() }; acc.set(row.user_id, e) }
+    for (const k of row.items_used ?? []) e.items.set(k, (e.items.get(k) ?? 0) + 1)
+    for (const d of row.debuffs_received ?? []) {
+      const cur = e.debuffs.get(d.debuff_type) ?? { count: 0, senders: [] }
+      cur.count += d.stacks || 1
+      if (d.sender) cur.senders.push(d.sender)
+      e.debuffs.set(d.debuff_type, cur)
+    }
+  }
+  const out = new Map<string, UserItemAgg>()
+  for (const [uid, e] of acc) {
+    out.set(uid, {
+      items: [...e.items].map(([key, count]) => ({ key, count })),
+      debuffs: [...e.debuffs].map(([type, v]) => ({ type, count: v.count, senders: v.senders })),
+    })
+  }
+  return out
+}
+
+// Kleines Item-Icon in der Ranglisten-Zeile. Grün = selbst eingesetzt, Rot = erhaltener Debuff.
+// stopPropagation, damit das Antippen nicht die Profil-Navigation der Zeile auslöst.
+function ItemChip({ itemKey, count, tone, onTap }: { itemKey: string; count: number; tone: 'good' | 'bad'; onTap: () => void }) {
+  const it = getShopItem(itemKey)
+  const Icon = it?.icon ?? Search
+  const cls = tone === 'good' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'
+  return (
+    <button
+      onClick={e => { e.stopPropagation(); onTap() }}
+      className={`inline-flex items-center gap-0.5 ${cls} rounded-full px-1.5 py-0.5 text-[11px] font-extrabold active:scale-95 transition-transform`}
+    >
+      <Icon size={12} strokeWidth={2.5} />
+      {count > 1 && <span>×{count}</span>}
+    </button>
+  )
+}
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })

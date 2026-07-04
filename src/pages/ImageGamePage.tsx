@@ -213,6 +213,8 @@ export function ImageGamePage() {
       if (hit) {
         await awardAndNotify(points, seconds, dist, true)
       }
+      // Item-/Debuff-Einsatz für die Rangliste protokollieren (Phase 7)
+      await supabase.rpc('log_image_items', { p_image_id: image.id })
     }
     setLastHit(hit); setLastPoints(points); setRevealed(true); setSubmitting(false)
   }
@@ -237,6 +239,7 @@ export function ImageGamePage() {
       image_id: image.id, user_id: user.id, click_x: tip?.x ?? 0, click_y: tip?.y ?? 0,
       is_correct: false, points: 0, time_seconds: seconds,
     })
+    await supabase.rpc('log_image_items', { p_image_id: image.id }) // Rangliste (Phase 7)
     navigate(-1)
   }
 

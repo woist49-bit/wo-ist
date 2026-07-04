@@ -893,3 +893,75 @@ begin
   insert into player_image_items (player_id, image_id, item_key) values (v_user, p_image_id, 'magnifier');
 end;
 $$;
+
+-- =============================================
+-- SCHRITT 12: Item-Log für die Rangliste – Phase 7
+-- =============================================
+
+-- Pro Spieler und Bild: welche Items er selbst eingesetzt hat und welche Debuffs auf ihm lagen.
+-- Wird beim Abschluss eines Bildes geschrieben (Snapshot für die Ranglisten-Anzeige).
+create table if not exists image_item_log (
+  player_id uuid not null references profiles(id) on delete cascade,
+  image_id uuid not null references event_images(id) on delete cascade,
+  items_used text[] not null default '{}',        -- z. B. {magnifier,double_points}
+  debuffs_received jsonb not null default '[]',    -- [{debuff_type, stacks, sender}]
+  created_at timestamptz not null default now(),
+  primary key (player_id, image_id)
+);
+alter table image_item_log enable row level security;
+create policy "own item log select" on image_item_log for select using (auth.uid() = player_id);
+
+-- Schreibt den Log-Eintrag des aufrufenden Spielers für ein Bild (aus player_image_items + debuffs).
+-- Nur wenn der Spieler das Bild wirklich gespielt hat. Idempotent (upsert).
+create or replace function log_image_items(p_image_id uuid)
+returns void language plpgsql security definer as $$
+declare
+  v_user uuid := auth.uid();
+  v_items text[];
+  v_debuffs jsonb;
+begin
+  if v_user is null then raise exception 'NOT_AUTHENTICATED'; end if;
+  if not exists (select 1 from player_attempts where image_id = p_image_id and user_id = v_user) then
+    return;
+  end if;
+
+  select coalesce(array_agg(item_key order by item_key), '{}')
+  into v_items
+  from player_image_items
+  where player_id = v_user and image_id = p_image_id;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'debuff_type', d.debuff_type, 'stacks', d.stacks, 'sender', p.username
+         ) order by d.created_at), '[]'::jsonb)
+  into v_debuffs
+  from debuffs d join profiles p on p.id = d.sender_id
+  where d.image_id = p_image_id and d.target_player_id = v_user;
+
+  insert into image_item_log (player_id, image_id, items_used, debuffs_received)
+  values (v_user, p_image_id, v_items, v_debuffs)
+  on conflict (player_id, image_id) do update
+    set items_used = excluded.items_used,
+        debuffs_received = excluded.debuffs_received,
+        created_at = now();
+end;
+$$;
+
+-- Item-Logs aller Spieler für ein Event (roh, eine Zeile pro Spieler+Bild).
+-- Aggregation (Zählen/Absender sammeln) macht das Frontend. Nur für Welt-Mitglieder.
+create or replace function event_item_log(p_event_id uuid)
+returns table (user_id uuid, items_used text[], debuffs_received jsonb)
+language plpgsql security definer as $$
+declare v_user uuid := auth.uid();
+begin
+  if not exists (
+    select 1 from live_events le join world_members wm on wm.world_id = le.world_id
+    where le.id = p_event_id and wm.user_id = v_user
+  ) then return; end if;
+
+  return query
+    select l.player_id, l.items_used, l.debuffs_received
+    from image_item_log l
+    join event_images ei on ei.id = l.image_id
+    where ei.event_id = p_event_id;
+end;
+$$;
