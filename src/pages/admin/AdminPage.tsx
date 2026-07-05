@@ -4,7 +4,7 @@ import { BadgeCheck, MoreVertical } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { levelFromXp } from '../../lib/scoring'
-import { Avatar } from '../../components/ui/Avatar'
+import { FramedAvatar } from '../../components/ui/FramedAvatar'
 import { Button } from '../../components/ui/Button'
 import { GameCard } from '../../components/ui/GameCard'
 import { Input } from '../../components/ui/Input'
@@ -235,7 +235,7 @@ export function AdminPage() {
                 <GameCard key={m.user_id}>
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <Avatar url={m.profile?.avatar_url} name={m.profile?.username} className="w-11 h-11 rounded-full text-base shadow-[inset_0_2px_0_#ffffff33]" />
+                      <FramedAvatar url={m.profile?.avatar_url} name={m.profile?.username} frame={m.profile?.equipped_frame} size={44} className="text-base shadow-[inset_0_2px_0_#ffffff33]" />
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
                           <p className="font-extrabold text-slate-800 truncate">{m.profile?.username}</p>

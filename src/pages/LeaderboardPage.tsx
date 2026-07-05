@@ -4,7 +4,7 @@ import { BadgeCheck } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { levelFromXp } from '../lib/scoring'
-import { Avatar } from '../components/ui/Avatar'
+import { FramedAvatar } from '../components/ui/FramedAvatar'
 import { GameCard } from '../components/ui/GameCard'
 import type { LeaderboardEntry } from '../types'
 
@@ -15,6 +15,7 @@ export function LeaderboardPage() {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([])
   const [certified, setCertified] = useState<Set<string>>(new Set())
   const [avatars, setAvatars] = useState<Map<string, string | null>>(new Map())
+  const [frames, setFrames] = useState<Map<string, string | null>>(new Map())
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -30,17 +31,19 @@ export function LeaderboardPage() {
         const { data: m } = await supabase.from('world_members').select('user_id, certified').eq('world_id', worldId)
         cert = new Set((m ?? []).filter(x => x.certified).map(x => x.user_id))
       }
-      // Profilbilder werden von den Leaderboard-RPCs nicht geliefert -> separat nachladen.
+      // Profilbilder + Rahmen werden von den Leaderboard-RPCs nicht geliefert -> separat nachladen.
       const ids = rows.map(r => r.user_id)
       const avatarMap = new Map<string, string | null>()
+      const frameMap = new Map<string, string | null>()
       if (ids.length) {
-        const { data: profs } = await supabase.from('profiles').select('id, avatar_url').in('id', ids)
-        for (const p of profs ?? []) avatarMap.set(p.id, p.avatar_url)
+        const { data: profs } = await supabase.from('profiles').select('id, avatar_url, equipped_frame').in('id', ids)
+        for (const p of profs ?? []) { avatarMap.set(p.id, p.avatar_url); frameMap.set(p.id, p.equipped_frame) }
       }
       if (active) {
         setEntries(rows)
         setCertified(cert)
         setAvatars(avatarMap)
+        setFrames(frameMap)
         setLoading(false)
       }
     }
@@ -69,6 +72,7 @@ export function LeaderboardPage() {
               isMe={entry.user_id === user?.id}
               certified={certified.has(entry.user_id)}
               avatarUrl={avatars.get(entry.user_id) ?? null}
+              frame={frames.get(entry.user_id) ?? null}
               onOpen={() => navigate(`${base}/profile/${entry.user_id}`)}
             />
           ))}
@@ -84,14 +88,14 @@ const rankBadge = (idx: number) =>
   : idx === 2 ? 'bg-amber-600 text-white'
   : 'bg-slate-200 text-slate-500'
 
-function LeaderboardRow({ entry, rank, isMe, certified, avatarUrl, onOpen }: { entry: LeaderboardEntry; rank: number; isMe: boolean; certified: boolean; avatarUrl: string | null; onOpen: () => void }) {
+function LeaderboardRow({ entry, rank, isMe, certified, avatarUrl, frame, onOpen }: { entry: LeaderboardEntry; rank: number; isMe: boolean; certified: boolean; avatarUrl: string | null; frame: string | null; onOpen: () => void }) {
   const { level } = levelFromXp(entry.xp)
   return (
     <button onClick={onOpen} className="w-full text-left active:translate-y-[2px] transition-transform">
       <GameCard className={`!py-3 ${isMe ? '!border-violet-400' : ''}`}>
         <div className="flex items-center gap-3">
           <div className="relative flex-shrink-0">
-            <Avatar url={avatarUrl} name={entry.username} className="w-11 h-11 rounded-full text-lg shadow-[inset_0_2px_0_#ffffff33]" />
+            <FramedAvatar url={avatarUrl} name={entry.username} frame={frame} size={44} className="text-lg shadow-[inset_0_2px_0_#ffffff33]" />
             <span className={`absolute -top-1.5 -left-1.5 min-w-[1.25rem] h-5 px-1 rounded-full flex items-center justify-center font-extrabold text-[11px] ring-2 ring-[#fdf6e3] shadow-[0_1px_2px_rgba(0,0,0,0.25)] ${rankBadge(rank - 1)}`}>
               {rank}
             </span>

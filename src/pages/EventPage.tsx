@@ -9,7 +9,7 @@ import { levelFromXp } from '../lib/scoring'
 import { getShopItem } from '../lib/shop'
 import { formatCountdown, IMAGE_PLAY_WINDOW_MS } from '../lib/time'
 import { GameCard } from '../components/ui/GameCard'
-import { Avatar } from '../components/ui/Avatar'
+import { FramedAvatar } from '../components/ui/FramedAvatar'
 import { EventImagePopup, type ImageStatus } from '../components/event/EventImagePopup'
 import type { LiveEvent, EventImage, PlayerAttempt, EventLeaderboardEntry } from '../types'
 
@@ -32,6 +32,7 @@ export function EventPage() {
   const [board, setBoard] = useState<EventLeaderboardEntry[]>([])
   const [inventory, setInventory] = useState<Map<string, number>>(new Map())
   const [avatars, setAvatars] = useState<Map<string, string | null>>(new Map())
+  const [frames, setFrames] = useState<Map<string, string | null>>(new Map())
   const [itemLog, setItemLog] = useState<Map<string, UserItemAgg>>(new Map())
   const [popupImg, setPopupImg] = useState<EventImage | null>(null)
   const [loading, setLoading] = useState(true)
@@ -61,10 +62,12 @@ export function EventPage() {
     // Profilbilder werden von event_leaderboard nicht geliefert -> separat nachladen (wie in der Spielwelt-Rangliste)
     const ids = boardRows.map(r => r.user_id)
     if (ids.length) {
-      const { data: profs } = await supabase.from('profiles').select('id, avatar_url').in('id', ids)
+      const { data: profs } = await supabase.from('profiles').select('id, avatar_url, equipped_frame').in('id', ids)
       const m = new Map<string, string | null>()
-      for (const p of profs ?? []) m.set(p.id, p.avatar_url)
+      const fm = new Map<string, string | null>()
+      for (const p of profs ?? []) { m.set(p.id, p.avatar_url); fm.set(p.id, p.equipped_frame) }
       setAvatars(m)
+      setFrames(fm)
     }
 
     // Item-Log (Phase 7) pro Spieler über alle Bilder aggregieren
@@ -212,7 +215,7 @@ export function EventPage() {
                 <GameCard className={`!py-3 ${isMe ? '!border-violet-400' : ''}`}>
                   <div className="flex items-center gap-3">
                     <div className="relative flex-shrink-0">
-                      <Avatar url={avatars.get(entry.user_id) ?? null} name={entry.username} className="w-11 h-11 rounded-full text-lg shadow-[inset_0_2px_0_#ffffff33]" />
+                      <FramedAvatar url={avatars.get(entry.user_id) ?? null} name={entry.username} frame={frames.get(entry.user_id) ?? null} size={44} className="text-lg shadow-[inset_0_2px_0_#ffffff33]" />
                       <span className={`absolute -top-1.5 -left-1.5 min-w-[1.25rem] h-5 px-1 rounded-full flex items-center justify-center font-extrabold text-[11px] ring-2 ring-[#fdf6e3] shadow-[0_1px_2px_rgba(0,0,0,0.25)] ${rankBadge(idx)}`}>
                         {idx + 1}
                       </span>

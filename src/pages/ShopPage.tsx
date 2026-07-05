@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, Gem, Sparkles } from 'lucide-react'
+import { ChevronLeft, Gem } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useToast } from '../stores/toast'
 import { SHOP_ITEMS, type ShopItem } from '../lib/shop'
+import { FRAMES, RARITY_STYLE, type FrameDef } from '../lib/frames'
 import { Button } from '../components/ui/Button'
 import { GameCard } from '../components/ui/GameCard'
 import { IconButton } from '../components/ui/IconButton'
 import { HeaderWallet } from '../components/layout/HeaderWallet'
+import { AvatarFrame } from '../components/ui/AvatarFrame'
 
 export function ShopPage() {
   const navigate = useNavigate()
@@ -16,16 +18,24 @@ export function ShopPage() {
   const { addToast } = useToast()
   const [tab, setTab] = useState<'items' | 'cosmetics'>('items')
   const [inventory, setInventory] = useState<Map<string, number>>(new Map())
+  const [owned, setOwned] = useState<Set<string>>(new Set())
   const [buying, setBuying] = useState<string | null>(null)
 
   const gems = profile?.gems ?? 0
+  const equipped = profile?.equipped_frame ?? null
 
-  useEffect(() => { loadInventory() }, [profile?.id])
+  useEffect(() => { loadInventory(); loadCosmetics() }, [profile?.id])
 
   async function loadInventory() {
     if (!profile) return
     const { data } = await supabase.from('player_inventory').select('item_key, quantity').eq('player_id', profile.id)
     setInventory(new Map((data ?? []).map(r => [r.item_key, r.quantity])))
+  }
+
+  async function loadCosmetics() {
+    if (!profile) return
+    const { data } = await supabase.from('user_frames').select('frame_id').eq('user_id', profile.id)
+    setOwned(new Set((data ?? []).map(r => r.frame_id)))
   }
 
   async function buy(item: ShopItem) {
@@ -43,6 +53,32 @@ export function ShopPage() {
     refreshProfile()       // Gems im Header aktualisieren
     await loadInventory()  // Inventar-Anzahl aktualisieren
     addToast(`${item.name} gekauft!`, 'success')
+  }
+
+  async function buyFrame(f: FrameDef) {
+    setBuying(f.id)
+    const { error } = await supabase.rpc('buy_frame', { p_frame_id: f.id })
+    setBuying(null)
+    if (error) {
+      const m = error.message || ''
+      const text = m.includes('NOT_ENOUGH_GEMS') ? 'Zu wenig Gems.'
+        : m.includes('UNKNOWN_FRAME') ? 'Rahmen nicht verfügbar – ist das Phase-8-SQL ausgeführt?'
+        : `Kauf fehlgeschlagen: ${m}`
+      addToast(text, 'error', 6000)
+      return
+    }
+    refreshProfile()
+    await loadCosmetics()
+    addToast(`${f.name} gekauft!`, 'success')
+  }
+
+  async function equipFrame(id: string | null) {
+    setBuying(id ?? '__none')
+    const { error } = await supabase.rpc('equip_frame', { p_frame_id: id })
+    setBuying(null)
+    if (error) { addToast('Ausrüsten fehlgeschlagen: ' + (error.message || ''), 'error', 6000); return }
+    refreshProfile() // profile.equipped_frame -> Header & Vorschau aktualisieren
+    addToast(id ? 'Rahmen ausgerüstet!' : 'Rahmen abgelegt.', 'success')
   }
 
   return (
@@ -70,18 +106,33 @@ export function ShopPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto overscroll-none min-h-0 px-4 pb-8">
-        <div className="max-w-lg mx-auto flex flex-col gap-3">
-          {tab === 'items' ? (
-            SHOP_ITEMS.map(item => (
+        {tab === 'items' ? (
+          <div className="max-w-lg mx-auto flex flex-col gap-3">
+            {SHOP_ITEMS.map(item => (
               <ItemCard key={item.key} item={item} gems={gems} owned={inventory.get(item.key) ?? 0} buying={buying === item.key} onBuy={() => buy(item)} />
-            ))
-          ) : (
-            <GameCard className="text-center py-12">
-              <Sparkles size={40} strokeWidth={1.5} className="text-violet-400 mx-auto mb-3" />
-              <p className="font-semibold text-slate-400">Cosmetics kommen bald.</p>
-            </GameCard>
-          )}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="max-w-lg mx-auto">
+            <p className="text-white/50 text-sm mb-3">Profilbild-Rahmen – überall sichtbar, wo dein Avatar erscheint.</p>
+            <div className="grid grid-cols-2 gap-3">
+              {FRAMES.map(f => (
+                <FrameCard
+                  key={f.id}
+                  frame={f}
+                  gems={gems}
+                  owned={owned.has(f.id)}
+                  equipped={equipped === f.id}
+                  busy={buying === f.id}
+                  avatarUrl={profile?.avatar_url ?? null}
+                  username={profile?.username ?? null}
+                  onBuy={() => buyFrame(f)}
+                  onEquip={equipFrame}
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -116,6 +167,51 @@ function ItemCard({ item, gems, owned, buying, onBuy }: {
               {tooPoor ? 'Zu wenig Gems' : 'Kaufen'}
             </Button>
           </div>
+        </div>
+      </div>
+    </GameCard>
+  )
+}
+
+function FrameCard({ frame, gems, owned, equipped, busy, avatarUrl, username, onBuy, onEquip }: {
+  frame: FrameDef
+  gems: number
+  owned: boolean
+  equipped: boolean
+  busy: boolean
+  avatarUrl: string | null
+  username: string | null
+  onBuy: () => void
+  onEquip: (id: string | null) => void
+}) {
+  const tooPoor = gems < frame.price
+  const rs = RARITY_STYLE[frame.rarity]
+  const initial = (username?.trim()?.[0] ?? '?').toUpperCase()
+  return (
+    <GameCard className={`!p-3 ${equipped ? '!border-violet-400' : ''}`}>
+      <div className="flex flex-col items-center text-center">
+        <div className="h-[112px] flex items-center justify-center">
+          <AvatarFrame
+            type={frame.id}
+            src={avatarUrl ?? undefined}
+            size={74}
+            fallback={<div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', background: '#8b5cf6', color: '#fff', fontWeight: 800, fontSize: 44 }}>{initial}</div>}
+          />
+        </div>
+        <p className="font-extrabold text-slate-800 leading-tight mt-1">{frame.name}</p>
+        <span className="text-[11px] font-extrabold rounded-full px-2 py-0.5 mt-1" style={{ background: rs.background, color: rs.color }}>{frame.rarity}</span>
+        <div className="mt-2.5 w-full">
+          {owned ? (
+            equipped ? (
+              <Button size="sm" variant="success" className="w-full" loading={busy} onClick={() => onEquip(null)}>Ausgerüstet ✓</Button>
+            ) : (
+              <Button size="sm" variant="primary" className="w-full" loading={busy} onClick={() => onEquip(frame.id)}>Ausrüsten</Button>
+            )
+          ) : (
+            <Button size="sm" variant="success" className="w-full" disabled={tooPoor || busy} loading={busy} onClick={onBuy}>
+              {tooPoor ? 'Zu wenig' : <span className="inline-flex items-center gap-1"><Gem size={14} strokeWidth={2.5} /> {frame.price}</span>}
+            </Button>
+          )}
         </div>
       </div>
     </GameCard>

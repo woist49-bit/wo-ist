@@ -965,3 +965,84 @@ begin
     where ei.event_id = p_event_id;
 end;
 $$;
+
+-- =============================================
+-- SCHRITT 13: Cosmetics – Profilbild-Rahmen – Phase 8
+-- Währung = Gems. Seltenheiten: Selten / Episch / Legendär.
+-- =============================================
+
+alter table profiles add column if not exists equipped_frame text;
+
+-- Katalog aller kaufbaren Rahmen (id = FrameType im Frontend)
+create table if not exists frames (
+  id text primary key,
+  name text not null,
+  rarity text not null,
+  price int not null check (price >= 0),
+  active boolean not null default true
+);
+
+-- equipped_frame darf nur auf einen existierenden Rahmen zeigen
+alter table profiles drop constraint if exists profiles_equipped_frame_fkey;
+alter table profiles add constraint profiles_equipped_frame_fkey
+  foreign key (equipped_frame) references frames(id) on delete set null;
+
+-- Besitz: welcher Spieler besitzt welchen Rahmen
+create table if not exists user_frames (
+  user_id uuid not null references profiles(id) on delete cascade,
+  frame_id text not null references frames(id) on delete cascade,
+  acquired_at timestamptz default now(),
+  primary key (user_id, frame_id)
+);
+
+-- Seed (Gems-Preise, drei Seltenheiten). Muss mit src/lib/frames.ts übereinstimmen.
+insert into frames (id, name, rarity, price) values
+  ('stars',    'Sternenreigen',  'Selten',    50),
+  ('sparkle',  'Funkelstaub',    'Selten',    50),
+  ('snow',     'Schneegestöber', 'Selten',    50),
+  ('confetti', 'Party-Regen',    'Selten',    50),
+  ('hearts',   'Herzenkranz',    'Selten',    50),
+  ('pulse',    'Herzschlag',     'Episch',   150),
+  ('beer',     'Prost!',         'Legendär', 550),
+  ('aurora',   'Polarlicht',     'Legendär', 550),
+  ('fire',     'Feuersturm',     'Legendär', 550)
+on conflict (id) do update
+  set name = excluded.name, rarity = excluded.rarity, price = excluded.price, active = true;
+
+-- Kauf: Gems atomar prüfen + abziehen, Besitz eintragen. Preis serverseitig (nicht fälschbar).
+create or replace function buy_frame(p_frame_id text)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_uid uuid := auth.uid(); v_price int;
+begin
+  if v_uid is null then raise exception 'NOT_AUTHENTICATED'; end if;
+  select price into v_price from frames where id = p_frame_id and active;
+  if not found then raise exception 'UNKNOWN_FRAME'; end if;
+  if exists (select 1 from user_frames where user_id = v_uid and frame_id = p_frame_id) then
+    return; -- schon im Besitz -> kein zweiter Abzug
+  end if;
+  update profiles set gems = gems - v_price where id = v_uid and gems >= v_price;
+  if not found then raise exception 'NOT_ENOUGH_GEMS'; end if;
+  insert into user_frames (user_id, frame_id) values (v_uid, p_frame_id);
+end;
+$$;
+
+-- Rahmen ausrüsten (nur wenn im Besitz); p_frame_id = null -> Rahmen ablegen.
+create or replace function equip_frame(p_frame_id text)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_uid uuid := auth.uid();
+begin
+  if v_uid is null then raise exception 'NOT_AUTHENTICATED'; end if;
+  if p_frame_id is not null and not exists (
+    select 1 from user_frames where user_id = v_uid and frame_id = p_frame_id
+  ) then raise exception 'FRAME_NOT_OWNED'; end if;
+  update profiles set equipped_frame = p_frame_id where id = v_uid;
+end;
+$$;
+
+alter table frames enable row level security;
+alter table user_frames enable row level security;
+drop policy if exists frames_read on frames;
+create policy frames_read on frames for select using (true);
+drop policy if exists user_frames_read on user_frames;
+create policy user_frames_read on user_frames for select using (true);
+-- Kein INSERT/UPDATE-Policy -> direktes Schreiben blockiert; Kauf/Ausrüsten nur über die RPCs.

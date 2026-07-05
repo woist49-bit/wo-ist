@@ -8,6 +8,7 @@ export interface Profile {
   avatar_url: string | null
   tutorial_completed: boolean
   gems: number
+  equipped_frame: string | null
 }
 
 export interface World {
