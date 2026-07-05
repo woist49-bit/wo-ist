@@ -30,6 +30,7 @@ export function ImageGamePage() {
   const [image, setImage] = useState<EventImage | null>(null)
   const [liveAttempt, setLiveAttempt] = useState<PlayerAttempt | null>(null) // Live-Versuch = Teilnahme/Ergebnis
   const [campaignFound, setCampaignFound] = useState(false)
+  const [campaignAttempted, setCampaignAttempted] = useState(false) // schon mal (auch daneben) auf diesem Kampagnen-Bild versucht?
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [revealed, setRevealed] = useState(false)
@@ -74,6 +75,7 @@ export function ImageGamePage() {
       const { data: prog } = await supabase.from('campaign_progress')
         .select('found').eq('campaign_id', campaignId).eq('image_id', imageId).eq('user_id', user!.id).maybeSingle()
       setCampaignFound(prog?.found ?? false)
+      setCampaignAttempted(!!prog) // Zeile existiert = schon mal versucht -> keine Punkte mehr
       // Kampagne startet immer spielbar (auch bereits gefundene Bilder -> wiederholbar)
     } else if (attRes.data) {
       // Live-Event: vorhandener Versuch -> Ergebnis zeigen
@@ -186,16 +188,24 @@ export function ImageGamePage() {
 
     if (isCampaign) {
       let awarded = 0
-      if (hit && !campaignFound) {
-        const eligible = !liveAttempt // kein Live-Versuch auf diesem Bild -> Punkte (Legacy oder neuer Spieler)
-        awarded = eligible ? calcPoints(seconds) : 0
+      if (!campaignAttempted) {
+        // Allererster Versuch auf diesem Bild -> nur jetzt gibt es Punkte, und nur bei Treffer.
+        // (Nach einem Fehlversuch ist die Lösung sichtbar -> spätere Treffer = geschenkt = 0 Punkte.)
+        const eligible = !liveAttempt // kein Live-Versuch auf diesem Bild (Legacy/neuer Spieler)
+        awarded = (hit && eligible) ? calcPoints(seconds) : 0
         await supabase.from('campaign_progress').upsert({
           campaign_id: campaignId, image_id: image.id, user_id: user.id,
-          world_id: worldId, found: true, points: awarded,
+          world_id: worldId, found: hit, points: awarded,
         }, { onConflict: 'campaign_id,image_id,user_id' })
+        setCampaignAttempted(true)
+        if (hit) setCampaignFound(true)
+        if (hit) await awardAndNotify(awarded, seconds, dist, true)
+      } else if (hit && !campaignFound) {
+        // Erster Versuch war daneben -> Fund zählt jetzt zum Abschluss, gibt aber 0 Punkte.
+        await supabase.from('campaign_progress').update({ found: true })
+          .eq('campaign_id', campaignId).eq('image_id', image.id).eq('user_id', user.id)
         setCampaignFound(true)
-        // Immer aufrufen (auch bei 0 Punkten), damit die Kampagnen-Abschluss-Gems geprüft werden
-        await awardAndNotify(awarded, seconds, dist, true)
+        await awardAndNotify(0, seconds, dist, true) // keine Punkte/XP, aber Abschluss-Gems prüfen
       }
       setLastHit(hit); setLastPoints(awarded); setRevealed(true); setSubmitting(false)
       return
