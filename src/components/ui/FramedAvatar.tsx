@@ -18,8 +18,10 @@ export function FramedAvatar({
 }) {
   if (isFrameId(frame)) {
     const initial = (name?.trim()?.[0] ?? '?').toUpperCase()
+    // Bewusst OHNE die className des Aufrufers: die enthält Schatten-Klassen, die auf dem
+    // quadratischen Kästchen hinter dem Rahmen zu geraden Linien (oben/unten) würden.
     return (
-      <div className={`relative flex-shrink-0 ${className}`} style={{ width: size, height: size }}>
+      <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
         <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}>
           <AvatarFrame
             type={frame as FrameType}
