@@ -27,7 +27,7 @@ export function FramedAvatar({
             size={size}
             paused={paused}
             fallback={
-              <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', background: '#8b5cf6', color: '#fff', fontWeight: 800, fontSize: 44 }}>
+              <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: '#8b5cf6', color: '#fff', fontWeight: 800, fontSize: 44 }}>
                 {initial}
               </div>
             }

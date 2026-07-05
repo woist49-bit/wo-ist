@@ -195,7 +195,7 @@ function FrameCard({ frame, gems, owned, equipped, busy, avatarUrl, username, on
             type={frame.id}
             src={avatarUrl ?? undefined}
             size={74}
-            fallback={<div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', background: '#8b5cf6', color: '#fff', fontWeight: 800, fontSize: 44 }}>{initial}</div>}
+            fallback={<div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: '#8b5cf6', color: '#fff', fontWeight: 800, fontSize: 44 }}>{initial}</div>}
           />
         </div>
         <p className="font-extrabold text-slate-800 leading-tight mt-1">{frame.name}</p>
