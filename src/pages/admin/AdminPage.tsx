@@ -63,8 +63,14 @@ export function AdminPage() {
   async function saveSettings() {
     setSettingsError(''); setSettingsSaved(false)
     const link = settingsLink.trim()
-    if (link && !link.startsWith('https://chat.whatsapp.com/')) {
-      setSettingsError('Bitte gib einen gültigen WhatsApp-Gruppenlink ein.')
+    // Akzeptierte WhatsApp-Link-Formate (Gruppe, Kanal, Einladung)
+    const validPrefixes = [
+      'https://chat.whatsapp.com/',
+      'https://www.whatsapp.com/channel/',
+      'https://chat.whatsapp.com/invite/',
+    ]
+    if (link && !validPrefixes.some(p => link.startsWith(p))) {
+      setSettingsError('Bitte gib einen gültigen WhatsApp-Link ein.')
       return
     }
     setSettingsSaving(true)
