@@ -36,6 +36,7 @@ export function FramedAvatar({
       </div>
     )
   }
-  // Kein Rahmen -> normaler runder Avatar (Initial-Fallback inklusive)
-  return <Avatar url={url} name={name} className={`rounded-full ${className}`} />
+  // Kein Rahmen -> normaler runder Avatar (Initial-Fallback inklusive).
+  // Größe explizit per style, da die Aufrufer nur noch `size` (px) statt w-/h-Klassen liefern.
+  return <Avatar url={url} name={name} className={`rounded-full ${className}`} style={{ width: size, height: size }} />
 }
