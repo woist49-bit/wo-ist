@@ -495,8 +495,8 @@ declare
   deadline timestamptz;
 begin
   for ev in select * from live_events where world_id = p_world_id and status = 'active' loop
-    -- Frist = spätestes Bild-Freischalten + 24h, mindestens aber das Event-Enddatum
-    select greatest(coalesce(max(ei.unlocks_at) + interval '24 hours', ev.ends_at), ev.ends_at)
+    -- Frist = Enddatum (letzter Tag) + 24h; falls Bilder darüber hinausgehen, das späteste Bild + 24h.
+    select greatest(coalesce(max(ei.unlocks_at), ev.ends_at), ev.ends_at) + interval '24 hours'
       into deadline from event_images ei where ei.event_id = ev.id;
     if now() >= deadline then
       update live_events set status = 'finished' where id = ev.id;

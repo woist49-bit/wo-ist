@@ -7,7 +7,7 @@ import { useNow } from '../hooks/useNow'
 import { useToast } from '../stores/toast'
 import { levelFromXp } from '../lib/scoring'
 import { getShopItem } from '../lib/shop'
-import { formatCountdown, IMAGE_PLAY_WINDOW_MS } from '../lib/time'
+import { formatCountdown, relativeDay, IMAGE_PLAY_WINDOW_MS } from '../lib/time'
 import { GameCard } from '../components/ui/GameCard'
 import { FramedAvatar } from '../components/ui/FramedAvatar'
 import { EventImagePopup, type ImageStatus } from '../components/event/EventImagePopup'
@@ -85,12 +85,18 @@ export function EventPage() {
   if (!event) return <div className="p-8 text-center text-white/50">Event nicht gefunden.</div>
 
   const totalPoints = Array.from(attempts.values()).reduce((s, a) => s + a.points, 0)
-  const nextImage = images
-    .filter(img => new Date(img.unlocks_at).getTime() > now)
-    .sort((a, b) => new Date(a.unlocks_at).getTime() - new Date(b.unlocks_at).getTime())[0] ?? null
-  // Event ist erst "vorbei", wenn das 24h-Fenster des letzten Bildes abgelaufen ist
+
+  // Fester Zeitplan: jeder Tag von Start bis Ende zur täglichen Freigabezeit ist ein "Slot".
+  const slots = buildSlots(event)
   const lastUnlockMs = images.length ? Math.max(...images.map(i => new Date(i.unlocks_at).getTime())) : 0
-  const trulyOver = now >= lastUnlockMs + IMAGE_PLAY_WINDOW_MS
+  // Event endet am Enddatum + 24h (letztes Bild am letzten Tag ist 24h spielbar);
+  // gehen Bilder über das Enddatum hinaus, zählt das späteste Bild + 24h.
+  const eventEndMs = Math.max(lastUnlockMs, new Date(event.ends_at).getTime()) + IMAGE_PLAY_WINDOW_MS
+  const trulyOver = now >= eventEndMs
+  // Nächster geplanter Tag (unabhängig davon, ob schon ein Bild hochgeladen wurde)
+  const nextSlot = slots.find(s => s > now) ?? null
+  // Vergangene Tage ohne veröffentlichtes Bild (2 Bilder an einem Tag ändern nichts)
+  const gapDays = slots.filter(s => s <= now && !images.some(img => sameDayMs(new Date(img.unlocks_at).getTime(), s)))
 
   return (
     <div className="p-4 max-w-lg mx-auto pt-5 pb-8">
@@ -179,23 +185,40 @@ export function EventPage() {
         </div>
       )}
 
-      {/* Event-Ende-Hinweis (nur wenn kein gesperrtes Bild mehr aussteht) */}
-      {images.length > 0 && !nextImage && (
-        !trulyOver ? (
-          <GameCard className="mt-4 !py-3">
-            <div className="flex items-center gap-3">
-              <Clock size={20} strokeWidth={2.5} className="text-violet-500 flex-shrink-0" />
-              <p className="text-sm font-semibold text-slate-700">
-                Letztes Bild ist da – Event endet in {formatCountdown(lastUnlockMs + IMAGE_PLAY_WINDOW_MS - now)}
-              </p>
-            </div>
-          </GameCard>
-        ) : (
-          <GameCard className="mt-4 !py-3 text-center text-sm font-semibold text-slate-500">
-            Dieses Event ist beendet.
-          </GameCard>
-        )
+      {/* Tage, an denen kein Bild veröffentlicht wurde */}
+      {gapDays.length > 0 && (
+        <GameCard className="mt-4 !py-3 !border-amber-300">
+          <div className="flex items-start gap-3">
+            <Clock size={20} strokeWidth={2.5} className="text-amber-500 flex-shrink-0 mt-0.5" />
+            <p className="text-sm font-semibold text-slate-700">
+              {gapDays.length === 1 ? 'An diesem Tag' : 'An diesen Tagen'} wurde kein Bild veröffentlicht:{' '}
+              <span className="text-slate-500">{gapDays.map(g => dayLabel(g)).join(', ')}</span>
+            </p>
+          </div>
+        </GameCard>
       )}
+
+      {/* Event-Status: Enddatum + 24h, nicht das letzte Bild */}
+      <GameCard className="mt-3 !py-3">
+        {trulyOver ? (
+          <p className="text-center text-sm font-semibold text-slate-500">Dieses Event ist beendet.</p>
+        ) : nextSlot ? (
+          <div className="flex items-center gap-3">
+            <Clock size={20} strokeWidth={2.5} className="text-violet-500 flex-shrink-0" />
+            <p className="text-sm font-semibold text-slate-700">
+              Nächstes Bild {relativeDay(new Date(nextSlot), new Date(now))} um {timeOf(nextSlot)} Uhr
+              <span className="text-slate-400"> · in {formatCountdown(nextSlot - now)}</span>
+            </p>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3">
+            <Clock size={20} strokeWidth={2.5} className="text-violet-500 flex-shrink-0" />
+            <p className="text-sm font-semibold text-slate-700">
+              Letztes Bild ist da – Event endet in {formatCountdown(eventEndMs - now)}
+            </p>
+          </div>
+        )}
+      </GameCard>
 
       <h2 className="text-lg font-extrabold text-white mt-8 mb-3">🏆 Event-Rangliste</h2>
       {board.length === 0 ? (
@@ -322,6 +345,33 @@ function ItemChip({ itemKey, count, tone, onTap }: { itemKey: string; count: num
       {count > 1 && <span>×{count}</span>}
     </button>
   )
+}
+
+// Alle Tages-Slots des Events (Start bis Ende, jeweils zur täglichen Freigabezeit)
+function buildSlots(event: LiveEvent): number[] {
+  const start = new Date(event.starts_at)
+  const end = new Date(event.ends_at)
+  const d = new Date(start.getFullYear(), start.getMonth(), start.getDate(), event.daily_release_hour, event.daily_release_minute, 0, 0)
+  const endMs = new Date(end.getFullYear(), end.getMonth(), end.getDate(), event.daily_release_hour, event.daily_release_minute, 0, 0).getTime()
+  const slots: number[] = []
+  for (let i = 0; i < 366 && d.getTime() <= endMs; i++) {
+    slots.push(d.getTime())
+    d.setDate(d.getDate() + 1)
+  }
+  return slots
+}
+
+function sameDayMs(a: number, b: number) {
+  const da = new Date(a), db = new Date(b)
+  return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate()
+}
+
+function dayLabel(ms: number) {
+  return new Date(ms).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })
+}
+
+function timeOf(ms: number) {
+  return new Date(ms).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
 }
 
 function formatDate(iso: string) {
