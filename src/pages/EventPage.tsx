@@ -215,7 +215,7 @@ export function EventPage() {
                 <GameCard className={`!py-3 ${isMe ? '!border-violet-400' : ''}`}>
                   <div className="flex items-center gap-3">
                     <div className="relative flex-shrink-0">
-                      <FramedAvatar url={avatars.get(entry.user_id) ?? null} name={entry.username} frame={frames.get(entry.user_id) ?? null} size={44} className="text-lg shadow-[inset_0_2px_0_#ffffff33]" />
+                      <FramedAvatar url={avatars.get(entry.user_id) ?? null} name={entry.username} frame={frames.get(entry.user_id) ?? null} size={44} paused={false} className="text-lg shadow-[inset_0_2px_0_#ffffff33]" />
                       <span className={`absolute -top-1.5 -left-1.5 min-w-[1.25rem] h-5 px-1 rounded-full flex items-center justify-center font-extrabold text-[11px] ring-2 ring-[#fdf6e3] shadow-[0_1px_2px_rgba(0,0,0,0.25)] ${rankBadge(idx)}`}>
                         {idx + 1}
                       </span>

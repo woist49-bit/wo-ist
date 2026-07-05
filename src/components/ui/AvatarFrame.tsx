@@ -294,9 +294,9 @@ export function AvatarFrame({ type, size = BASE, src, alt = "", paused = false, 
     <div className={className} style={{ position: "relative", width: BOX * scale, height: BOX * scale, ...style }}>
       <div style={{ position: "absolute", top: 0, left: 0, width: BOX, height: BOX, transform: `scale(${scale})`, transformOrigin: "top left" }}>
         {/* Foto */}
-        <div style={{ position: "absolute", left: "50%", top: "50%", width: BASE, height: BASE, marginLeft: -BASE / 2, marginTop: -BASE / 2, zIndex: 1, borderRadius: "50%", overflow: "hidden", background: "repeating-linear-gradient(45deg,#e6ded5,#e6ded5 8px,#efe9e2 8px,#efe9e2 16px)", display: "grid", placeItems: "center" }}>
+        <div style={{ position: "absolute", left: "50%", top: "50%", width: BASE, height: BASE, marginLeft: -BASE / 2, marginTop: -BASE / 2, zIndex: 1, borderRadius: "50%", overflow: "hidden", background: src ? "#ece7df" : "repeating-linear-gradient(45deg,#e6ded5,#e6ded5 8px,#efe9e2 8px,#efe9e2 16px)", display: "grid", placeItems: "center" }}>
           {src ? (
-            <img src={src} alt={alt} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            <img src={src} alt={alt} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
           ) : (
             fallback ?? <span style={{ fontFamily: "monospace", fontSize: 10, letterSpacing: 1.5, color: "#b3a99e" }}>FOTO</span>
           )}

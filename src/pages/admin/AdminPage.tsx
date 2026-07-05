@@ -235,7 +235,7 @@ export function AdminPage() {
                 <GameCard key={m.user_id}>
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <FramedAvatar url={m.profile?.avatar_url} name={m.profile?.username} frame={m.profile?.equipped_frame} size={44} className="text-base shadow-[inset_0_2px_0_#ffffff33]" />
+                      <FramedAvatar url={m.profile?.avatar_url} name={m.profile?.username} frame={m.profile?.equipped_frame} size={44} paused={false} className="text-base shadow-[inset_0_2px_0_#ffffff33]" />
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
                           <p className="font-extrabold text-slate-800 truncate">{m.profile?.username}</p>
