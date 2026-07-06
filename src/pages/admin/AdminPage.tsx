@@ -151,8 +151,8 @@ export function AdminPage() {
     const { error } = await supabase.rpc('set_member_role', { p_world_id: worldId, p_user_id: id, p_role: 'user' })
     if (error) { alert('Herabstufung fehlgeschlagen: ' + error.message); return }
     setMemberDialog(null); setMenuOpen(null)
-    // Sich selbst degradiert -> harter Reload, damit ALLE gecachten Admin-Rechte weg sind
-    if (id === user?.id) { window.location.href = `/world/${worldId}`; return }
+    // Sich selbst degradiert -> sofort zurück zur Welt-Startseite (kein Admin-Menü mehr)
+    if (id === user?.id) { navigate(`/world/${worldId}`, { replace: true }); return }
     setMembers(prev => prev.map(x => x.user_id === id ? { ...x, role: 'user' } : x))
   }
 
