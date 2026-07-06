@@ -307,7 +307,7 @@ export function ImageGamePage() {
   const markers: ViewerMarker[] = []
   // Lupe: die HÄLFTE ohne die Person abdunkeln (grober Tipp) -> zuerst, damit der Pin oben liegt
   if (placing && magHalf && nat.w) {
-    const dim = 'rgba(2,6,23,0.62)'
+    const dim = 'rgba(2,6,23,0.86)'   // andere Hälfte stark abdunkeln -> Ziel-Hälfte deutlich hervorheben
     const region =
       magHalf === 'left' ? { x_rel: 0.5, y_rel: 0, w_rel: 0.5, h_rel: 1 }   // Person links -> rechts abdunkeln
       : magHalf === 'right' ? { x_rel: 0, y_rel: 0, w_rel: 0.5, h_rel: 1 }
@@ -371,18 +371,18 @@ export function ImageGamePage() {
         </div>
       )}
 
-      {/* Lupe (Während-Runden-Item): direkt unter dem Timer, oben rechts */}
+      {/* Lupe (Während-Runden-Item): Game-UI-Button wie Header/Footer, oben rechts unter dem Timer */}
       {placing && begun && !lupeUsed && lupeCount > 0 && (
-        <button
-          onClick={useMagnifier}
-          disabled={lupeBusy}
-          className="absolute right-3 z-30 flex items-center gap-1.5 bg-sky-500 text-white font-extrabold pl-3 pr-3.5 py-2 rounded-2xl shadow-[0_4px_0_#0369a1,inset_0_2px_0_#ffffff4d] active:translate-y-[2px] active:shadow-[0_2px_0_#0369a1] disabled:opacity-60 touch-manipulation select-none"
-          style={{ top: 'calc(env(safe-area-inset-top) + 4.25rem)' }}
-          aria-label="Lupe einsetzen"
-        >
-          <Search size={18} strokeWidth={2.5} />
-          <span className="text-sm">×{lupeCount}</span>
-        </button>
+        <div className="absolute right-3 z-30" style={{ top: 'calc(env(safe-area-inset-top) + 4.25rem)' }}>
+          <div className="relative">
+            <IconButton variant="sky" onClick={useMagnifier} disabled={lupeBusy} aria-label="Lupe einsetzen">
+              <Search size={24} strokeWidth={2.5} />
+            </IconButton>
+            <span className="absolute -top-1.5 -right-1.5 min-w-[1.25rem] h-5 px-1 rounded-full bg-white text-sky-700 text-[11px] font-extrabold flex items-center justify-center shadow-[0_1px_2px_rgba(0,0,0,0.3)] ring-2 ring-sky-500">
+              {lupeCount}
+            </span>
+          </div>
+        </div>
       )}
 
       {/* Lupen-Hinweis: in welcher Hälfte die Person ist */}
