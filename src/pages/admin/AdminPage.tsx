@@ -42,7 +42,7 @@ export function AdminPage() {
   const [settingsError, setSettingsError] = useState('')
   const [settingsSaved, setSettingsSaved] = useState(false)
 
-  useEffect(() => { load() }, [worldId])
+  useEffect(() => { load() }, [worldId, user])
 
   async function load() {
     const [membRes, evRes, campRes, worldRes] = await Promise.all([
@@ -51,7 +51,11 @@ export function AdminPage() {
       supabase.from('campaigns').select('*').eq('world_id', worldId).order('created_at', { ascending: false }),
       supabase.from('worlds').select('*').eq('id', worldId).single(),
     ])
-    setMembers((membRes.data ?? []) as (WorldMember & { profile: Profile })[])
+    const membs = (membRes.data ?? []) as (WorldMember & { profile: Profile })[]
+    // Verwaltung ist nur für Admins – sonst raus (auch nach Selbst-Degradierung)
+    const me = membs.find(m => m.user_id === user?.id)
+    if (!me || me.role !== 'admin') { navigate(`/world/${worldId}`, { replace: true }); return }
+    setMembers(membs)
     setEvents(evRes.data ?? [])
     setCampaigns(campRes.data ?? [])
     const world = worldRes.data as World | null
@@ -146,8 +150,10 @@ export function AdminPage() {
     const id = memberDialog.member.user_id
     const { error } = await supabase.rpc('set_member_role', { p_world_id: worldId, p_user_id: id, p_role: 'user' })
     if (error) { alert('Herabstufung fehlgeschlagen: ' + error.message); return }
-    setMembers(prev => prev.map(x => x.user_id === id ? { ...x, role: 'user' } : x))
     setMemberDialog(null); setMenuOpen(null)
+    // Sich selbst degradiert -> harter Reload, damit ALLE gecachten Admin-Rechte weg sind
+    if (id === user?.id) { window.location.href = `/world/${worldId}`; return }
+    setMembers(prev => prev.map(x => x.user_id === id ? { ...x, role: 'user' } : x))
   }
 
   async function confirmRemove() {
