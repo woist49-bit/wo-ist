@@ -134,7 +134,9 @@ export function AdminPage() {
   async function confirmPromote() {
     if (!memberDialog) return
     const id = memberDialog.member.user_id
-    await supabase.from('world_members').update({ role: 'admin' }).eq('world_id', worldId).eq('user_id', id)
+    // RPC: setzt Rolle + löscht die in dieser Welt gesammelten Punkte des Spielers
+    const { error } = await supabase.rpc('set_member_role', { p_world_id: worldId, p_user_id: id, p_role: 'admin' })
+    if (error) { alert('Beförderung fehlgeschlagen: ' + error.message); return }
     setMembers(prev => prev.map(x => x.user_id === id ? { ...x, role: 'admin' } : x))
     setMemberDialog(null); setMenuOpen(null)
   }
@@ -142,7 +144,8 @@ export function AdminPage() {
   async function confirmDemote() {
     if (!memberDialog) return
     const id = memberDialog.member.user_id
-    await supabase.from('world_members').update({ role: 'user' }).eq('world_id', worldId).eq('user_id', id)
+    const { error } = await supabase.rpc('set_member_role', { p_world_id: worldId, p_user_id: id, p_role: 'user' })
+    if (error) { alert('Herabstufung fehlgeschlagen: ' + error.message); return }
     setMembers(prev => prev.map(x => x.user_id === id ? { ...x, role: 'user' } : x))
     setMemberDialog(null); setMenuOpen(null)
   }
@@ -359,11 +362,11 @@ export function AdminPage() {
             </p>
             <p className="text-slate-600 text-sm mb-4">
               {memberDialog.type === 'promote'
-                ? `Möchtest du ${memberDialog.member.profile?.username} zum Admin ernennen? Er erhält dann alle Admin-Rechte in dieser Spielwelt.`
+                ? `Möchtest du ${memberDialog.member.profile?.username} zum Admin ernennen? Als Admin nimmt ${memberDialog.member.profile?.username} nicht mehr als Spieler teil und verschwindet aus der Rangliste. Die bisher in dieser Welt gesammelten Punkte werden dabei gelöscht (Neustart bei 0, auch bei späterer Herabstufung).`
                 : memberDialog.type === 'demote'
                   ? (memberDialog.member.user_id === user?.id
-                      ? 'Möchtest du deine Admin-Rolle abgeben? Du wirst dann zum normalen Spieler.'
-                      : `Möchtest du ${memberDialog.member.profile?.username} die Admin-Rolle entziehen? ${memberDialog.member.profile?.username} wird dann zum normalen Spieler.`)
+                      ? 'Möchtest du deine Admin-Rolle abgeben? Du wirst dann zum normalen Spieler und startest bei 0 Punkten in dieser Welt.'
+                      : `Möchtest du ${memberDialog.member.profile?.username} die Admin-Rolle entziehen? ${memberDialog.member.profile?.username} wird zum normalen Spieler und startet bei 0 Punkten in dieser Welt.`)
                   : `Möchtest du ${memberDialog.member.profile?.username} wirklich aus der Spielwelt entfernen? Er kann danach nicht mehr auf diese Spielwelt zugreifen.`}
             </p>
             <div className="flex gap-3">

@@ -35,12 +35,13 @@ export function EventPage() {
   const [frames, setFrames] = useState<Map<string, string | null>>(new Map())
   const [itemLog, setItemLog] = useState<Map<string, UserItemAgg>>(new Map())
   const [popupImg, setPopupImg] = useState<EventImage | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)   // Admin dieser Welt -> spielt nicht, verwaltet
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { if (eventId && user) load() }, [eventId, user])
 
   async function load() {
-    const [evRes, imgRes, attRes, boardRes, invRes, logRes] = await Promise.all([
+    const [evRes, imgRes, attRes, boardRes, invRes, logRes, roleRes] = await Promise.all([
       supabase.from('live_events').select('*').eq('id', eventId).single(),
       supabase.from('event_images').select('*').eq('event_id', eventId).order('unlocks_at', { ascending: true }).order('sort_order', { ascending: true }),
       supabase.from('player_attempts').select('*').eq('user_id', user!.id).in('image_id',
@@ -49,7 +50,9 @@ export function EventPage() {
       supabase.rpc('event_leaderboard', { p_event_id: eventId }),
       supabase.from('player_inventory').select('item_key, quantity').eq('player_id', user!.id),
       supabase.rpc('event_item_log', { p_event_id: eventId }),
+      supabase.from('world_members').select('role').eq('world_id', worldId).eq('user_id', user!.id).maybeSingle(),
     ])
+    setIsAdmin(roleRes.data?.role === 'admin')
     setEvent(evRes.data)
     setImages((imgRes.data ?? []) as EventImage[])
     const map = new Map<string, PlayerAttempt>()
@@ -102,9 +105,15 @@ export function EventPage() {
     <div className="p-4 max-w-lg mx-auto pt-5 pb-8">
       <h1 className="text-2xl font-extrabold text-white mb-1">{event.title}</h1>
       <p className="text-white/50 text-sm mb-3">{formatDateRange(event.starts_at, event.ends_at)}</p>
-      <div className="inline-block bg-amber-400 text-amber-950 font-extrabold text-sm rounded-full px-4 py-1.5 mb-5 shadow-[0_3px_0_#b45309,inset_0_1px_0_#ffffff80]">
-        Deine Punkte: {totalPoints.toLocaleString()}
-      </div>
+      {isAdmin ? (
+        <div className="inline-block bg-sky-500 text-white font-extrabold text-sm rounded-full px-4 py-1.5 mb-5 shadow-[0_3px_0_#0369a1,inset_0_1px_0_#ffffff80]">
+          👑 Admin – du verwaltest dieses Event
+        </div>
+      ) : (
+        <div className="inline-block bg-amber-400 text-amber-950 font-extrabold text-sm rounded-full px-4 py-1.5 mb-5 shadow-[0_3px_0_#b45309,inset_0_1px_0_#ffffff80]">
+          Deine Punkte: {totalPoints.toLocaleString()}
+        </div>
+      )}
 
       {images.length === 0 ? (
         <GameCard className="text-center py-12 text-slate-400">
@@ -124,10 +133,12 @@ export function EventPage() {
             return (
               <button
                 key={img.id}
-                onClick={() => setPopupImg(img)}
+                onClick={() => isAdmin
+                  ? navigate(`/world/${worldId}/admin/event/${eventId}/image/${img.id}`)
+                  : setPopupImg(img)}
                 className="w-full text-left active:translate-y-[2px] transition-transform"
               >
-                <GameCard className={played ? '' : locked ? '' : expired ? 'opacity-70' : '!border-violet-400'}>
+                <GameCard className={isAdmin ? '!border-sky-300' : played ? '' : locked ? '' : expired ? 'opacity-70' : '!border-violet-400'}>
                   <div className="flex items-center gap-4">
                     <div className="relative w-20 h-14 rounded-xl overflow-hidden bg-slate-300 flex-shrink-0 flex items-center justify-center">
                       {locked ? (
@@ -160,7 +171,9 @@ export function EventPage() {
                       )}
                     </div>
                     <div className="text-right flex-shrink-0 text-sm font-bold">
-                      {locked ? (
+                      {isAdmin ? (
+                        <span className="text-sky-600">Verwalten →</span>
+                      ) : locked ? (
                         <span className="text-slate-400 inline-flex items-center gap-1"><Lock size={14} strokeWidth={2.5} /> Gesperrt</span>
                       ) : played ? (
                         att.is_correct ? (

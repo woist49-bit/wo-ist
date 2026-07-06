@@ -364,7 +364,7 @@ language sql security definer as $$
   left join points pt on pt.user_id = p.id
   left join achievements a on a.user_id = p.id
   left join wins w on w.user_id = p.id
-  where wm.world_id = p_world_id
+  where wm.world_id = p_world_id and wm.role <> 'admin'   -- Admins nehmen in ihrer Welt nicht teil
   order by coalesce(pt.pts, 0) desc, p.global_xp desc;
 $$;
 
@@ -432,6 +432,10 @@ language sql security definer as $$
   from player_attempts pa
   join event_images ei on ei.id = pa.image_id and ei.event_id = p_event_id
   join profiles p on p.id = pa.user_id
+  where not exists (   -- Admins der Welt tauchen nicht in der Event-Rangliste auf
+    select 1 from world_members wm
+    where wm.world_id = ei.world_id and wm.user_id = pa.user_id and wm.role = 'admin'
+  )
   group by p.id, p.username, p.global_xp
   order by total_points desc;
 $$;
@@ -455,6 +459,37 @@ begin
   insert into world_members (world_id, user_id, role) values (v_world_id, p_user_id, 'user');
 
   return v_world_id;
+end;
+$$;
+
+-- Rolle eines Mitglieds ändern (nur durch Welt-Admins). Bei Beförderung zum Admin
+-- werden ALLE in dieser Welt gesammelten Spieldaten des Nutzers gelöscht -> Start bei 0,
+-- falls er je wieder degradiert wird. Admins nehmen in ihrer Welt nicht als Spieler teil.
+create or replace function set_member_role(p_world_id uuid, p_user_id uuid, p_role text)
+returns void language plpgsql security definer as $$
+declare v_caller uuid := auth.uid();
+begin
+  if v_caller is null then raise exception 'NOT_AUTHENTICATED'; end if;
+  if p_role not in ('admin', 'user') then raise exception 'BAD_ROLE'; end if;
+  if not exists (select 1 from world_members where world_id = p_world_id and user_id = v_caller and role = 'admin') then
+    raise exception 'NOT_ADMIN';
+  end if;
+
+  update world_members set role = p_role where world_id = p_world_id and user_id = p_user_id;
+
+  if p_role = 'admin' then
+    -- Punkte + Spieldaten dieser Welt löschen (er startet bei 0, keine Wiederherstellung)
+    delete from player_attempts pa using event_images ei
+      where pa.image_id = ei.id and ei.world_id = p_world_id and pa.user_id = p_user_id;
+    delete from campaign_progress where world_id = p_world_id and user_id = p_user_id;
+    delete from image_item_log iil using event_images ei
+      where iil.image_id = ei.id and ei.world_id = p_world_id and iil.player_id = p_user_id;
+    delete from player_image_items pii using event_images ei
+      where pii.image_id = ei.id and ei.world_id = p_world_id and pii.player_id = p_user_id;
+    delete from debuffs d using event_images ei
+      where d.image_id = ei.id and ei.world_id = p_world_id
+        and (d.sender_id = p_user_id or d.target_player_id = p_user_id);
+  end if;
 end;
 $$;
 

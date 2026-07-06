@@ -19,6 +19,7 @@ import { AchievementsPage } from './pages/AchievementsPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { AdminPage } from './pages/admin/AdminPage'
 import { AdminEventPage } from './pages/admin/AdminEventPage'
+import { AdminImagePage } from './pages/admin/AdminImagePage'
 import { AdminCampaignPage } from './pages/admin/AdminCampaignPage'
 
 export function App() {
@@ -63,6 +64,7 @@ export function App() {
           <Route path="campaign/:campaignId/image/:imageId" element={user ? <ImageGamePage /> : <Navigate to="/" replace />} />
           <Route path="admin" element={user ? <AdminPage /> : <Navigate to="/" replace />} />
           <Route path="admin/event/:eventId" element={user ? <AdminEventPage /> : <Navigate to="/" replace />} />
+          <Route path="admin/event/:eventId/image/:imageId" element={user ? <AdminImagePage /> : <Navigate to="/" replace />} />
           <Route path="admin/campaign/:campaignId" element={user ? <AdminCampaignPage /> : <Navigate to="/" replace />} />
         </Route>
       </Routes>

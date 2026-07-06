@@ -64,10 +64,18 @@ export function ImageGamePage() {
   useEffect(() => { if (imageId && user) load() }, [imageId, user])
 
   async function load() {
-    const [imgRes, attRes] = await Promise.all([
+    const [imgRes, attRes, roleRes] = await Promise.all([
       supabase.from('event_images').select('*').eq('id', imageId).single(),
       supabase.from('player_attempts').select('*').eq('image_id', imageId).eq('user_id', user!.id).maybeSingle(),
+      supabase.from('world_members').select('role').eq('world_id', worldId).eq('user_id', user!.id).maybeSingle(),
     ])
+    // Admins spielen in ihrer Welt nicht -> Event-Bild in die Admin-Ansicht, sonst zurück
+    if (roleRes.data?.role === 'admin') {
+      const evId = imgRes.data?.event_id
+      if (evId) navigate(`/world/${worldId}/admin/event/${evId}/image/${imageId}`, { replace: true })
+      else navigate(-1)
+      return
+    }
     setImage(imgRes.data)
     setLiveAttempt(attRes.data)
 
