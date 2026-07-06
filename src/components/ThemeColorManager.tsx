@@ -1,15 +1,14 @@
 import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 
-// Farbe am oberen Bildschirmrand (Android-Statusleiste via theme-color, iOS via body-bg).
-// Pro Screen die Farbe, die dort oben tatsächlich zu sehen ist – so gibt es keinen
-// Farbwechsel zwischen Statusleiste/Rand und dem App-Hintergrund.
-function edgeColorForPath(path: string): string {
+// Farbe am OBEREN Bildschirmrand (Notch/Statusleiste). Pro Screen die Farbe,
+// die dort oben tatsächlich zu sehen ist.
+function topColorForPath(path: string): string {
   const p = path.replace(/\/+$/, '') || '/'
   if (/\/image\/[^/]+$/.test(p)) return '#000000'                 // Spielscreen (Vollbild schwarz)
   if (p === '/profile' || p.endsWith('/profile')) return '#0284c7' // Profil-Hero (sky-600)
   if (p === '/datenschutz') return '#475569'                      // slate-600
-  if (p === '/tutorial') return '#475569'                         // Tutorial: slate-600 (Slides/Abschluss)
+  if (p === '/tutorial') return '#475569'                         // Tutorial: slate-600
   if (p === '/shop') return '#475569'                             // Shop: slate-600
   if (/^\/world\/[^/]+$/.test(p)) return '#0284c7'                // Welt-Startseite: Header/Hero sky-600
   if (/^\/world\//.test(p)) return '#475569'                      // übrige Welt-Screens: slate-600
@@ -17,12 +16,25 @@ function edgeColorForPath(path: string): string {
   return '#475569'                                                 // Auth / Fallback: slate-600
 }
 
+// Farbe am UNTEREN Bildschirmrand (Home-Indicator). Fast alle Layouts enden im
+// dunklen Verlauf – nur Spielscreen (schwarz) und Profil (slate-900) weichen ab.
+function bottomColorForPath(path: string): string {
+  const p = path.replace(/\/+$/, '') || '/'
+  if (/\/image\/[^/]+$/.test(p)) return '#000000'                 // Spielscreen: schwarz
+  if (p === '/profile' || p.endsWith('/profile')) return '#0f172a' // Profil endet in slate-900
+  return '#1e293b'                                                 // sonst slate-800 (Verlauf-Ende)
+}
+
 export function ThemeColorManager() {
   const { pathname } = useLocation()
   useEffect(() => {
-    const color = edgeColorForPath(pathname)
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', color)
-    document.body.style.backgroundColor = color
+    const top = topColorForPath(pathname)
+    const bottom = bottomColorForPath(pathname)
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', top)
+    // Safe-Area-Streifen (siehe index.css) exakt einfärben – oben und unten getrennt
+    document.documentElement.style.setProperty('--edge-top', top)
+    document.documentElement.style.setProperty('--edge-bottom', bottom)
+    document.body.style.backgroundColor = bottom // Fallback für nicht abgedeckte Ränder/Overscroll
   }, [pathname])
   return null
 }

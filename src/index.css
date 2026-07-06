@@ -47,6 +47,30 @@ input, textarea, select, [contenteditable="true"] {
 .safe-bottom  { padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem); }
 .safe-area-pb { padding-bottom: calc(env(safe-area-inset-bottom) + 1rem); }
 
+/* Safe-Area-Ränder (Notch/Statusleiste oben, Home-Indicator unten) exakt in der
+   Farbe des jeweiligen Screen-Randes einfärben – sonst blitzt oben/unten eine
+   falsche Farbe durch (vor allem auf dem Smartphone). Die Farben kommen pro
+   Screen vom ThemeColorManager. Auf Geräten ohne Notch ist env() = 0 -> unsichtbar. */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  pointer-events: none;
+}
+body::before {
+  top: 0;
+  height: env(safe-area-inset-top);
+  background: var(--edge-top, #475569);
+}
+body::after {
+  bottom: 0;
+  height: env(safe-area-inset-bottom);
+  background: var(--edge-bottom, #1e293b);
+}
+
 input[type="range"] { accent-color: #6366f1; }
 
 @keyframes slideInRight {
