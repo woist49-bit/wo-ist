@@ -145,7 +145,8 @@ export function EventPage() {
                         <Lock size={22} strokeWidth={2.5} className="text-slate-500" />
                       ) : (
                         <>
-                          <img src={img.image_url} alt="" className="w-full h-full object-cover" />
+                          {/* Noch nicht gespielt -> unscharf, damit man nicht vorab suchen kann */}
+                          <img src={img.image_url} alt="" className={`w-full h-full object-cover ${!played ? 'blur-[5px] scale-110' : ''}`} />
                           {!played && (
                             <div className="absolute inset-0 flex items-center justify-center bg-black/30 text-white">
                               <Search size={20} strokeWidth={2.5} />

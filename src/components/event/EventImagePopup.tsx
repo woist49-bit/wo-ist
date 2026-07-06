@@ -144,10 +144,20 @@ export function EventImagePopup({ image, index, status, attempt, inventory, onCl
       >
         {/* Kopf */}
         <div className="relative flex-shrink-0">
-          <div className="h-28 bg-slate-300 overflow-hidden flex items-center justify-center">
-            {status === 'locked'
-              ? <div className="flex flex-col items-center text-slate-500"><Lock size={30} strokeWidth={2.5} /></div>
-              : <img src={image.image_url} alt="" className="w-full h-full object-cover" />}
+          <div className="relative h-28 bg-slate-300 overflow-hidden flex items-center justify-center">
+            {status === 'locked' ? (
+              <Lock size={30} strokeWidth={2.5} className="text-slate-500" />
+            ) : (
+              // Vorschau vor dem Spielen unscharf, damit man nicht schon suchen kann (bei 'played' scharf)
+              <img src={image.image_url} alt="" className={`w-full h-full object-cover ${status === 'open' ? 'blur-md scale-110' : ''}`} />
+            )}
+            {status === 'open' && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-black/45 rounded-full px-3 py-1">
+                  <Search size={14} strokeWidth={2.5} /> Erst beim Spielen scharf
+                </span>
+              </div>
+            )}
           </div>
           <button
             onClick={onClose}
