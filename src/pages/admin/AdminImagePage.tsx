@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ChevronLeft, Trophy } from 'lucide-react'
+import { ChevronLeft, Trophy, Target, ChevronDown, Check, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { GameCard } from '../../components/ui/GameCard'
@@ -35,6 +35,7 @@ export function AdminImagePage() {
   const [index, setIndex] = useState(0)
   const [results, setResults] = useState<PlayerResult[]>([])
   const [editDesc, setEditDesc] = useState('')
+  const [markerOpen, setMarkerOpen] = useState(false) // eingeklappt, damit man nicht versehentlich bearbeitet
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { if (imageId && user) load() }, [imageId, user])
@@ -111,14 +112,6 @@ export function AdminImagePage() {
       </div>
 
       <GameCard className="mb-4">
-        <h2 className="font-extrabold text-slate-800 mb-3">🎯 Marker bearbeiten</h2>
-        <DescriptionInput value={editDesc} onChange={setEditDesc} />
-        <div className="mt-3">
-          <BoundingBoxEditor image={image} onSave={saveMarker} />
-        </div>
-      </GameCard>
-
-      <GameCard>
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-extrabold text-slate-800 flex items-center gap-2"><Trophy size={18} className="text-amber-500" /> Wer hat gespielt</h2>
           <span className="text-xs font-bold text-slate-500">{results.length} gespielt · {finds} gefunden</span>
@@ -138,12 +131,27 @@ export function AdminImagePage() {
                   </p>
                 </div>
                 {r.correct ? (
-                  <span className="text-sm font-extrabold text-green-600 flex-shrink-0">✓ {r.points} Pkt</span>
+                  <span className="inline-flex items-center gap-1 text-sm font-extrabold text-green-600 flex-shrink-0"><Check size={16} strokeWidth={3} /> {r.points} Pkt</span>
                 ) : (
-                  <span className="text-sm font-extrabold text-red-500 flex-shrink-0">✗ Daneben</span>
+                  <span className="inline-flex items-center gap-1 text-sm font-extrabold text-red-500 flex-shrink-0"><X size={16} strokeWidth={3} /> Daneben</span>
                 )}
               </div>
             ))}
+          </div>
+        )}
+      </GameCard>
+
+      <GameCard>
+        <button onClick={() => setMarkerOpen(o => !o)} className="w-full flex items-center justify-between active:scale-[0.99] transition-transform">
+          <h2 className="font-extrabold text-slate-800 flex items-center gap-2"><Target size={18} className="text-violet-500" /> Marker bearbeiten</h2>
+          <ChevronDown size={20} strokeWidth={2.5} className={`text-slate-400 transition-transform ${markerOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {markerOpen && (
+          <div className="mt-4">
+            <DescriptionInput value={editDesc} onChange={setEditDesc} />
+            <div className="mt-3">
+              <BoundingBoxEditor image={image} onSave={saveMarker} />
+            </div>
           </div>
         )}
       </GameCard>
