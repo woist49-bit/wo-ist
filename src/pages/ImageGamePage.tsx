@@ -305,15 +305,15 @@ export function ImageGamePage() {
   if (!image) return <div className="p-8 text-center text-white/50">Bild nicht gefunden.</div>
 
   const markers: ViewerMarker[] = []
-  // Lupe: die HÄLFTE ohne die Person abdunkeln (grober Tipp) -> zuerst, damit der Pin oben liegt
+  // Lupe: die HÄLFTE mit der Person grün hervorheben (grober Tipp) -> zuerst, damit der Pin oben liegt
   if (placing && magHalf && nat.w) {
-    const dim = 'rgba(2,6,23,0.86)'   // andere Hälfte stark abdunkeln -> Ziel-Hälfte deutlich hervorheben
+    const green = 'rgba(34,197,94,0.42)'   // Ziel-Hälfte grün markieren
     const region =
-      magHalf === 'left' ? { x_rel: 0.5, y_rel: 0, w_rel: 0.5, h_rel: 1 }   // Person links -> rechts abdunkeln
-      : magHalf === 'right' ? { x_rel: 0, y_rel: 0, w_rel: 0.5, h_rel: 1 }
-      : magHalf === 'top' ? { x_rel: 0, y_rel: 0.5, w_rel: 1, h_rel: 0.5 }
-      : { x_rel: 0, y_rel: 0, w_rel: 1, h_rel: 0.5 }
-    markers.push({ ...region, variant: 'region', color: dim })
+      magHalf === 'left' ? { x_rel: 0, y_rel: 0, w_rel: 0.5, h_rel: 1 }     // Person links -> linke Hälfte grün
+      : magHalf === 'right' ? { x_rel: 0.5, y_rel: 0, w_rel: 0.5, h_rel: 1 }
+      : magHalf === 'top' ? { x_rel: 0, y_rel: 0, w_rel: 1, h_rel: 0.5 }
+      : { x_rel: 0, y_rel: 0.5, w_rel: 1, h_rel: 0.5 }
+    markers.push({ ...region, variant: 'region', color: green })
   }
   if (placing && tip) markers.push({ x_rel: tip.x, y_rel: tip.y, variant: 'pin', color: '#818cf8' })
   if (revealed && nat.w) {
@@ -388,7 +388,7 @@ export function ImageGamePage() {
       {/* Lupen-Hinweis: in welcher Hälfte die Person ist */}
       {placing && begun && magHalf && (
         <div className="absolute inset-x-0 z-20 flex justify-center px-3 pointer-events-none" style={{ top: 'calc(env(safe-area-inset-top) + 7rem)' }}>
-          <span className="inline-flex items-center gap-1.5 bg-sky-500 text-white text-sm font-extrabold px-3 py-1.5 rounded-full shadow-[0_3px_0_#0369a1]">
+          <span className="inline-flex items-center gap-1.5 bg-green-500 text-white text-sm font-extrabold px-3 py-1.5 rounded-full shadow-[0_3px_0_#15803d]">
             <Search size={14} strokeWidth={2.5} /> Person in der {HALF_LABEL[magHalf]}
           </span>
         </div>
