@@ -66,6 +66,7 @@ export function App() {
           <Route path="admin/event/:eventId" element={user ? <AdminEventPage /> : <Navigate to="/" replace />} />
           <Route path="admin/event/:eventId/image/:imageId" element={user ? <AdminImagePage /> : <Navigate to="/" replace />} />
           <Route path="admin/campaign/:campaignId" element={user ? <AdminCampaignPage /> : <Navigate to="/" replace />} />
+          <Route path="admin/campaign/:campaignId/image/:imageId" element={user ? <AdminImagePage /> : <Navigate to="/" replace />} />
         </Route>
       </Routes>
       <ToastContainer />

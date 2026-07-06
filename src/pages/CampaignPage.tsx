@@ -59,10 +59,12 @@ export function CampaignPage() {
   const doneCount = images.filter(i => done.has(i.id)).length
   const origin = campaign.original_event_id
 
-  // Admin: Bild öffnen -> Admin-Ansicht (Event-Kampagne) bzw. Legacy-Kampagnen-Editor
+  // Admin: Bild öffnen -> Admin-Bild-Ansicht (Event-Kampagne über Event, sonst über Kampagne)
   const openImage = (img: EventImage) => {
     if (isAdmin) {
-      navigate(origin ? `/world/${worldId}/admin/event/${origin}/image/${img.id}` : `/world/${worldId}/admin/campaign/${campaignId}`)
+      navigate(origin
+        ? `/world/${worldId}/admin/event/${origin}/image/${img.id}`
+        : `/world/${worldId}/admin/campaign/${campaignId}/image/${img.id}`)
     } else {
       navigate(`/world/${worldId}/campaign/${campaignId}/image/${img.id}`)
     }

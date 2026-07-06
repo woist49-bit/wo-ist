@@ -69,10 +69,11 @@ export function ImageGamePage() {
       supabase.from('player_attempts').select('*').eq('image_id', imageId).eq('user_id', user!.id).maybeSingle(),
       supabase.from('world_members').select('role').eq('world_id', worldId).eq('user_id', user!.id).maybeSingle(),
     ])
-    // Admins spielen in ihrer Welt nicht -> Event-Bild in die Admin-Ansicht, sonst zurück
+    // Admins spielen in ihrer Welt nicht -> in die Admin-Bild-Ansicht (Event bzw. Kampagne)
     if (roleRes.data?.role === 'admin') {
       const evId = imgRes.data?.event_id
       if (evId) navigate(`/world/${worldId}/admin/event/${evId}/image/${imageId}`, { replace: true })
+      else if (campaignId) navigate(`/world/${worldId}/admin/campaign/${campaignId}/image/${imageId}`, { replace: true })
       else navigate(-1)
       return
     }

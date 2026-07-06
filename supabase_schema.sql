@@ -493,6 +493,27 @@ begin
 end;
 $$;
 
+-- Spielerergebnisse eines (Legacy-)Kampagnen-Bildes für die Admin-Ansicht.
+-- Security-Definer, weil campaign_progress per RLS nur eigene Zeilen zeigt. Nur Welt-Admins.
+create or replace function campaign_image_players(p_campaign_id uuid, p_image_id uuid)
+returns table (user_id uuid, found boolean, points integer, username text, avatar_url text, equipped_frame text)
+language plpgsql security definer as $$
+declare v_caller uuid := auth.uid(); v_world uuid;
+begin
+  select world_id into v_world from campaigns where id = p_campaign_id;
+  if v_world is null then return; end if;
+  if not exists (select 1 from world_members wm where wm.world_id = v_world and wm.user_id = v_caller and wm.role = 'admin') then
+    return;
+  end if;
+  return query
+    select cp.user_id, cp.found, cp.points, p.username, p.avatar_url, p.equipped_frame
+    from campaign_progress cp
+    join profiles p on p.id = cp.user_id
+    where cp.campaign_id = p_campaign_id and cp.image_id = p_image_id
+    order by cp.found desc, cp.points desc;
+end;
+$$;
+
 -- =============================================
 -- SCHRITT 5: Storage-Policies
 -- (Bucket "game-images" muss vorher im Dashboard erstellt werden)
