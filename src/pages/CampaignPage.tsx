@@ -14,12 +14,17 @@ export function CampaignPage() {
   const [images, setImages] = useState<EventImage[]>([])
   // image_id -> erreichte Punktzahl (Vorhandensein im Map = abgeschlossen)
   const [done, setDone] = useState<Map<string, number>>(new Map())
+  const [isAdmin, setIsAdmin] = useState(false) // Admin dieser Welt -> verwaltet, spielt nicht
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { if (campaignId && user) load() }, [campaignId, user])
 
   async function load() {
-    const { data: camp } = await supabase.from('campaigns').select('*').eq('id', campaignId).single()
+    const [{ data: camp }, roleRes] = await Promise.all([
+      supabase.from('campaigns').select('*').eq('id', campaignId).single(),
+      supabase.from('world_members').select('role').eq('world_id', worldId).eq('user_id', user!.id).maybeSingle(),
+    ])
+    setIsAdmin(roleRes.data?.role === 'admin')
     setCampaign(camp)
 
     let imgs: EventImage[] = []
@@ -52,6 +57,16 @@ export function CampaignPage() {
 
   const isEventCampaign = !!campaign.original_event_id
   const doneCount = images.filter(i => done.has(i.id)).length
+  const origin = campaign.original_event_id
+
+  // Admin: Bild öffnen -> Admin-Ansicht (Event-Kampagne) bzw. Legacy-Kampagnen-Editor
+  const openImage = (img: EventImage) => {
+    if (isAdmin) {
+      navigate(origin ? `/world/${worldId}/admin/event/${origin}/image/${img.id}` : `/world/${worldId}/admin/campaign/${campaignId}`)
+    } else {
+      navigate(`/world/${worldId}/campaign/${campaignId}/image/${img.id}`)
+    }
+  }
 
   return (
     <div className="p-4 max-w-lg mx-auto pt-4 pb-8">
@@ -59,13 +74,17 @@ export function CampaignPage() {
         <h1 className="text-2xl font-extrabold text-white">{campaign.title}</h1>
         {campaign.is_legacy && <span className="text-xs font-bold text-amber-300 border border-amber-300/50 rounded-full px-2 py-0.5">Legacy</span>}
       </div>
-      <p className="text-white/60 font-semibold mb-4">{doneCount} von {images.length} gefunden</p>
+      {isAdmin
+        ? <p className="text-sky-300 font-semibold mb-4">👑 Admin – du verwaltest diese Kampagne</p>
+        : <p className="text-white/60 font-semibold mb-4">{doneCount} von {images.length} gefunden</p>}
 
-      <GameCard className="mb-6 !bg-[#efe2c4] !border-[#dcc99c] text-xs text-slate-600 py-3">
-        {isEventCampaign
-          ? 'Wer beim Live-Event dabei war, spielt ohne Punkte. Neue Spieler bekommen Punkte beim ersten Fund. Bilder sind beliebig wiederholbar und schalten der Reihe nach frei.'
-          : 'Finde die gesuchte Person auf jedem Bild. Punkte gibt\'s beim ersten Fund, danach beliebig wiederholbar. Bilder schalten der Reihe nach frei.'}
-      </GameCard>
+      {!isAdmin && (
+        <GameCard className="mb-6 !bg-[#efe2c4] !border-[#dcc99c] text-xs text-slate-600 py-3">
+          {isEventCampaign
+            ? 'Wer beim Live-Event dabei war, spielt ohne Punkte. Neue Spieler bekommen Punkte beim ersten Fund. Bilder sind beliebig wiederholbar und schalten der Reihe nach frei.'
+            : 'Finde die gesuchte Person auf jedem Bild. Punkte gibt\'s beim ersten Fund, danach beliebig wiederholbar. Bilder schalten der Reihe nach frei.'}
+        </GameCard>
+      )}
 
       {images.length === 0 ? (
         <GameCard className="text-center py-12 text-slate-400">
@@ -78,22 +97,22 @@ export function CampaignPage() {
             const completed = done.has(img.id)
             const pts = done.get(img.id) ?? 0
             const unlocked = idx === 0 || done.has(images[idx - 1].id)
-            const tappable = completed || unlocked
+            const tappable = isAdmin || completed || unlocked   // Admins können jedes Bild öffnen
             const current = unlocked && !completed
             return (
               <button
                 key={img.id}
                 disabled={!tappable}
-                onClick={() => tappable && navigate(`/world/${worldId}/campaign/${campaignId}/image/${img.id}`)}
+                onClick={() => tappable && openImage(img)}
                 className={`w-full text-left ${tappable ? 'active:translate-y-[2px] transition-transform' : 'cursor-default'}`}
               >
-                <GameCard className={!tappable ? 'opacity-50' : current ? '!border-violet-400' : ''}>
+                <GameCard className={isAdmin ? '!border-sky-300' : !tappable ? 'opacity-50' : current ? '!border-violet-400' : ''}>
                   <div className="flex items-center gap-4">
                     <div className="relative w-20 h-14 rounded-xl overflow-hidden bg-slate-300 flex-shrink-0">
                       {tappable ? (
                         <>
                           <img src={img.image_url} alt="" className="w-full h-full object-cover" />
-                          {completed && <div className="absolute top-1 right-1 bg-green-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shadow">✓</div>}
+                          {!isAdmin && completed && <div className="absolute top-1 right-1 bg-green-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shadow">✓</div>}
                         </>
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-slate-500"><Lock size={22} strokeWidth={2.5} /></div>
@@ -103,12 +122,14 @@ export function CampaignPage() {
                       <p className="font-extrabold text-slate-800">Bild {idx + 1}</p>
                       {tappable && img.description && <p className="text-xs text-slate-600 mt-0.5 line-clamp-2">{img.description}</p>}
                       <p className="text-xs text-slate-500 mt-0.5">
-                        {completed ? (pts > 0 ? `✓ Geschafft · ${pts} Punkte` : '✓ Geschafft')
+                        {isAdmin ? 'Admin-Ansicht'
+                          : completed ? (pts > 0 ? `✓ Geschafft · ${pts} Punkte` : '✓ Geschafft')
                           : current ? 'Jetzt spielen' : 'Gesperrt'}
                       </p>
                     </div>
                     <div className="flex-shrink-0 text-sm font-bold">
-                      {completed ? <span className="text-green-600">Wiederholen →</span>
+                      {isAdmin ? <span className="text-sky-600">Verwalten →</span>
+                        : completed ? <span className="text-green-600">Wiederholen →</span>
                         : current ? <span className="text-violet-600">Spielen →</span>
                         : null}
                     </div>
