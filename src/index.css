@@ -5,12 +5,13 @@
   box-sizing: border-box;
 }
 
-/* App-Shell-Fundament: feste Seite, kein Nutzer-Zoom, kein Gummiband, kein Seiten-Scroll */
+/* App-Shell-Fundament: feste Seite, kein Nutzer-Zoom, kein Gummiband, kein Seiten-Scroll.
+   WICHTIG: html hat KEINEN Hintergrund – so wird die body-Hintergrundfarbe (unten) vom
+   Browser auf den ganzen Viewport-Hintergrund propagiert. */
 html, body {
   margin: 0;
   padding: 0;
   width: 100%;
-  height: 100vh;
   height: 100dvh;
   position: fixed;
   top: 0;
@@ -20,10 +21,14 @@ html, body {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   touch-action: manipulation;
-  background-color: #475569; /* Slate-600 – passt zum oberen Ende des neutralen Hintergrund-Verlaufs */
 }
 
+/* ===== EINZIGE Stelle im ganzen Code für den Safe-Area-Hintergrund =====
+   Diese eine body-Farbe füllt (per Canvas-Propagation) den kompletten Viewport-
+   Hintergrund inklusive der Safe-Area-Zonen hinter Statusleiste (oben) und
+   Home-Indicator (unten). Kein Hintergrund auf html, #root oder einem Wrapper. */
 body {
+  background-color: #1e293b; /* Slate-800 – App-Grundfarbe */
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
@@ -31,7 +36,6 @@ body {
 
 #root {
   width: 100%;
-  height: 100vh;
   height: 100dvh;
   overflow: hidden;
 }
@@ -44,32 +48,13 @@ input, textarea, select, [contenteditable="true"] {
 
 /* Safe-Area-Helfer – env() ist auf Geräten ohne Notch automatisch 0 */
 .safe-top     { padding-top: calc(env(safe-area-inset-top) + 0.75rem); }
-.safe-bottom  { padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem); }
-.safe-area-pb { padding-bottom: calc(env(safe-area-inset-bottom) + 1rem); }
 
-/* Safe-Area-Ränder (Notch/Statusleiste oben, Home-Indicator unten) exakt in der
-   Farbe des jeweiligen Screen-Randes einfärben – sonst blitzt oben/unten eine
-   falsche Farbe durch (vor allem auf dem Smartphone). Die Farben kommen pro
-   Screen vom ThemeColorManager. Auf Geräten ohne Notch ist env() = 0 -> unsichtbar. */
-body::before,
-body::after {
-  content: "";
-  position: fixed;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  pointer-events: none;
-}
-body::before {
-  top: 0;
-  height: env(safe-area-inset-top);
-  background: var(--edge-top, #475569);
-}
-body::after {
-  bottom: 0;
-  height: env(safe-area-inset-bottom);
-  background: var(--edge-bottom, #1e293b);
-}
+/* ===== EINZIGE Stelle im ganzen Code für das Tab-Bar-Padding unten =====
+   Genau eine Zeile: hebt die Tab-Bar-Icons über den Home-Indicator. Kein Margin,
+   kein zweites Padding, keine Berechnung. Auf Geräten ohne Home-Indicator = 0. */
+.safe-bottom  { padding-bottom: env(safe-area-inset-bottom); }
+
+.safe-area-pb { padding-bottom: calc(env(safe-area-inset-bottom) + 1rem); }
 
 input[type="range"] { accent-color: #6366f1; }
 

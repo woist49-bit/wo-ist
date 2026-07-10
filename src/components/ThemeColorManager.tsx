@@ -1,8 +1,9 @@
 import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 
-// Farbe am OBEREN Bildschirmrand (Notch/Statusleiste). Pro Screen die Farbe,
-// die dort oben tatsächlich zu sehen ist.
+// Farbe der Statusleiste (theme-color-Meta) pro Screen. Das ist NUR die Tönung der
+// System-/Browser-Statusleiste (Android-Chrome, iOS-Safari-Toolbar) – KEIN Hintergrund.
+// Der Safe-Area-Hintergrund kommt allein aus body { background-color } in index.css.
 function topColorForPath(path: string): string {
   const p = path.replace(/\/+$/, '') || '/'
   if (/\/image\/[^/]+$/.test(p)) return '#000000'                 // Spielscreen (Vollbild schwarz)
@@ -16,25 +17,10 @@ function topColorForPath(path: string): string {
   return '#475569'                                                 // Auth / Fallback: slate-600
 }
 
-// Farbe am UNTEREN Bildschirmrand (Home-Indicator). Fast alle Layouts enden im
-// dunklen Verlauf – nur Spielscreen (schwarz) und Profil (slate-900) weichen ab.
-function bottomColorForPath(path: string): string {
-  const p = path.replace(/\/+$/, '') || '/'
-  if (/\/image\/[^/]+$/.test(p)) return '#000000'                 // Spielscreen: schwarz
-  if (p === '/profile' || p.endsWith('/profile')) return '#0f172a' // Profil endet in slate-900
-  return '#1e293b'                                                 // sonst slate-800 (Verlauf-Ende)
-}
-
 export function ThemeColorManager() {
   const { pathname } = useLocation()
   useEffect(() => {
-    const top = topColorForPath(pathname)
-    const bottom = bottomColorForPath(pathname)
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', top)
-    // Safe-Area-Streifen (siehe index.css) exakt einfärben – oben und unten getrennt
-    document.documentElement.style.setProperty('--edge-top', top)
-    document.documentElement.style.setProperty('--edge-bottom', bottom)
-    document.body.style.backgroundColor = bottom // Fallback für nicht abgedeckte Ränder/Overscroll
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', topColorForPath(pathname))
   }, [pathname])
   return null
 }
