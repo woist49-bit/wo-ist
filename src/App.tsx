@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import { AppLayout, WorldLayout } from './components/layout/AppLayout'
@@ -13,14 +14,25 @@ import { WorldsPage } from './pages/WorldsPage'
 import { WorldHomePage } from './pages/WorldHomePage'
 import { EventPage } from './pages/EventPage'
 import { CampaignPage } from './pages/CampaignPage'
+// Globus-Seite (three.js) lazy laden – hält das App-Start-Bundle klein.
+const CampaignGlobePage = lazy(() => import('./pages/CampaignGlobePage').then(m => ({ default: m.CampaignGlobePage })))
 import { ImageGamePage } from './pages/ImageGamePage'
 import { LeaderboardPage } from './pages/LeaderboardPage'
 import { AchievementsPage } from './pages/AchievementsPage'
 import { ProfilePage } from './pages/ProfilePage'
-import { AdminPage } from './pages/admin/AdminPage'
+// Admin-Verwaltung lazy laden – hält Leaflet (Standortwähler) aus dem Start-Bundle.
+const AdminPage = lazy(() => import('./pages/admin/AdminPage').then(m => ({ default: m.AdminPage })))
 import { AdminEventPage } from './pages/admin/AdminEventPage'
 import { AdminImagePage } from './pages/admin/AdminImagePage'
 import { AdminCampaignPage } from './pages/admin/AdminCampaignPage'
+
+function LazyFallback() {
+  return (
+    <div className="h-full flex items-center justify-center">
+      <div className="w-8 h-8 border-4 border-white/70 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+}
 
 export function App() {
   const { user, loading } = useAuth()
@@ -60,9 +72,10 @@ export function App() {
           <Route path="profile/:userId" element={user ? <ProfilePage /> : <Navigate to="/" replace />} />
           <Route path="event/:eventId" element={user ? <EventPage /> : <Navigate to="/" replace />} />
           <Route path="event/:eventId/image/:imageId" element={user ? <ImageGamePage /> : <Navigate to="/" replace />} />
+          <Route path="campaigns" element={user ? <Suspense fallback={<LazyFallback />}><CampaignGlobePage /></Suspense> : <Navigate to="/" replace />} />
           <Route path="campaign/:campaignId" element={user ? <CampaignPage /> : <Navigate to="/" replace />} />
           <Route path="campaign/:campaignId/image/:imageId" element={user ? <ImageGamePage /> : <Navigate to="/" replace />} />
-          <Route path="admin" element={user ? <AdminPage /> : <Navigate to="/" replace />} />
+          <Route path="admin" element={user ? <Suspense fallback={<LazyFallback />}><AdminPage /></Suspense> : <Navigate to="/" replace />} />
           <Route path="admin/event/:eventId" element={user ? <AdminEventPage /> : <Navigate to="/" replace />} />
           <Route path="admin/event/:eventId/image/:imageId" element={user ? <AdminImagePage /> : <Navigate to="/" replace />} />
           <Route path="admin/campaign/:campaignId" element={user ? <AdminCampaignPage /> : <Navigate to="/" replace />} />

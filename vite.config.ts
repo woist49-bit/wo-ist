@@ -29,6 +29,9 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // Der (lazy geladene) Globus-Chunk mit three.js ist groß – Precache-Limit anheben,
+        // sonst bricht der Build ab. Wird nur bei Bedarf nachgeladen (Code-Splitting).
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,

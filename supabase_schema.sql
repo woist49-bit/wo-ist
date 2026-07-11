@@ -81,6 +81,11 @@ create table live_events (
   created_at timestamptz not null default now()
 );
 
+-- Globus-Standort (Pflichtfeld im Admin-Formular): Position des Events auf dem 3D-Globus.
+-- Wird beim Archivieren zur Kampagne uebernommen (siehe finish_due_events).
+alter table live_events add column if not exists latitude float8;
+alter table live_events add column if not exists longitude float8;
+
 create table event_images (
   id uuid primary key default gen_random_uuid(),
   event_id uuid references live_events(id) on delete cascade,
@@ -117,6 +122,11 @@ create table campaigns (
   is_legacy boolean not null default false,
   created_at timestamptz not null default now()
 );
+
+-- Globus-Standort der Kampagne (Pflichtfeld im Admin-Formular). Bei archivierten
+-- Events aus dem Original-Event uebernommen (siehe finish_due_events).
+alter table campaigns add column if not exists latitude float8;
+alter table campaigns add column if not exists longitude float8;
 
 -- Legacy-Kampagnen haben eigene Bilder (Event-Kampagnen nutzen die Bilder des Original-Events)
 alter table event_images add column if not exists campaign_id uuid references campaigns(id) on delete cascade;
@@ -557,8 +567,8 @@ begin
     if now() >= deadline then
       update live_events set status = 'finished' where id = ev.id;
       if not exists (select 1 from campaigns where original_event_id = ev.id) then
-        insert into campaigns (world_id, title, original_event_id, is_legacy)
-        values (ev.world_id, ev.title, ev.id, false);
+        insert into campaigns (world_id, title, original_event_id, is_legacy, latitude, longitude)
+        values (ev.world_id, ev.title, ev.id, false, ev.latitude, ev.longitude);
       end if;
     end if;
   end loop;

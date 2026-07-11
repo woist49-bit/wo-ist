@@ -8,6 +8,7 @@ import { FramedAvatar } from '../../components/ui/FramedAvatar'
 import { Button } from '../../components/ui/Button'
 import { GameCard } from '../../components/ui/GameCard'
 import { Input } from '../../components/ui/Input'
+import { LocationPicker } from '../../components/admin/LocationPicker'
 import type { WorldMember, LiveEvent, Profile, Campaign, World } from '../../types'
 
 type Member = WorldMember & { profile: Profile }
@@ -32,6 +33,8 @@ export function AdminPage() {
   const [newStartDate, setNewStartDate] = useState('')
   const [newEndDate, setNewEndDate] = useState('')
   const [newReleaseTime, setNewReleaseTime] = useState('09:00')
+  const [newLat, setNewLat] = useState<number | null>(null)
+  const [newLng, setNewLng] = useState<number | null>(null)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
 
@@ -98,6 +101,10 @@ export function AdminPage() {
       setError('Titel, Start- und Enddatum erforderlich.')
       return
     }
+    if (newLat == null || newLng == null) {
+      setError('Bitte einen Standort auf der Karte festlegen.')
+      return
+    }
     if (new Date(newStartDate) >= new Date(newEndDate)) {
       setError('Enddatum muss nach Startdatum liegen.')
       return
@@ -119,12 +126,14 @@ export function AdminPage() {
       daily_release_minute: minutes,
       status: 'draft',
       created_by: user.id,
+      latitude: newLat,
+      longitude: newLng,
     }).select().single()
 
     setCreating(false)
     if (err) { setError(err.message); return }
     if (data) {
-      setNewTitle(''); setNewDescription(''); setNewStartDate(''); setNewEndDate(''); setNewReleaseTime('09:00')
+      setNewTitle(''); setNewDescription(''); setNewStartDate(''); setNewEndDate(''); setNewReleaseTime('09:00'); setNewLat(null); setNewLng(null)
       navigate(`/world/${worldId}/admin/event/${data.id}`)
     }
   }
@@ -169,7 +178,7 @@ export function AdminPage() {
     const ev = events.find(e => e.id === eventId)
     await supabase.from('live_events').update({ status: 'finished' }).eq('id', eventId)
     if (ev) {
-      await supabase.from('campaigns').insert({ world_id: worldId, title: ev.title, original_event_id: eventId, is_legacy: false })
+      await supabase.from('campaigns').insert({ world_id: worldId, title: ev.title, original_event_id: eventId, is_legacy: false, latitude: ev.latitude ?? null, longitude: ev.longitude ?? null })
     }
     load()
   }
@@ -216,6 +225,10 @@ export function AdminPage() {
               <Input tone="light" label="Startdatum" type="date" value={newStartDate} onChange={e => setNewStartDate(e.target.value)} />
               <Input tone="light" label="Enddatum" type="date" value={newEndDate} onChange={e => setNewEndDate(e.target.value)} />
               <Input tone="light" label="Uhrzeit (tägliche Freischaltung)" type="time" value={newReleaseTime} onChange={e => setNewReleaseTime(e.target.value)} />
+              <div>
+                <label className="text-sm font-medium text-slate-600 mb-1 block">Standort (Pflicht) – für den Globus</label>
+                <LocationPicker lat={newLat} lng={newLng} onChange={(la, lo) => { setNewLat(la); setNewLng(lo) }} />
+              </div>
               {error && <p className="text-red-600 text-sm font-medium">{error}</p>}
               <Button variant="success" loading={creating} onClick={createEvent} className="w-full">Event erstellen</Button>
             </div>
@@ -392,21 +405,30 @@ export function AdminPage() {
 
 function LegacyCampaignForm({ worldId, onCreated }: { worldId: string; onCreated: (campaignId: string) => void }) {
   const [title, setTitle] = useState('')
+  const [lat, setLat] = useState<number | null>(null)
+  const [lng, setLng] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
   async function create() {
     if (!title) return
-    setLoading(true)
-    const { data } = await supabase.from('campaigns').insert({ world_id: worldId, title, original_event_id: null, is_legacy: true }).select().single()
-    setTitle('')
+    if (lat == null || lng == null) { setError('Bitte einen Standort auf der Karte festlegen.'); return }
+    setLoading(true); setError('')
+    const { data } = await supabase.from('campaigns').insert({ world_id: worldId, title, original_event_id: null, is_legacy: true, latitude: lat, longitude: lng }).select().single()
+    setTitle(''); setLat(null); setLng(null)
     setLoading(false)
     if (data) onCreated(data.id)
   }
 
   return (
-    <div className="flex gap-2">
-      <Input tone="light" placeholder="Urlaub 2022" value={title} onChange={e => setTitle(e.target.value)} className="flex-1" />
-      <Button variant="success" loading={loading} onClick={create} disabled={!title}>Anlegen</Button>
+    <div className="flex flex-col gap-3">
+      <Input tone="light" placeholder="Urlaub 2022" value={title} onChange={e => setTitle(e.target.value)} />
+      <div>
+        <label className="text-sm font-medium text-slate-600 mb-1 block">Standort (Pflicht) – für den Globus</label>
+        <LocationPicker lat={lat} lng={lng} onChange={(la, lo) => { setLat(la); setLng(lo) }} />
+      </div>
+      {error && <p className="text-red-600 text-sm font-medium">{error}</p>}
+      <Button variant="success" loading={loading} onClick={create} disabled={!title || lat == null || lng == null}>Anlegen</Button>
     </div>
   )
 }

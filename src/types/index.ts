@@ -41,6 +41,8 @@ export interface LiveEvent {
   daily_release_minute: number
   status: 'draft' | 'active' | 'finished'
   created_by: string
+  latitude?: number | null
+  longitude?: number | null
 }
 
 export interface EventImage {
@@ -95,6 +97,8 @@ export interface Campaign {
   original_event_id: string | null
   created_at: string
   is_legacy: boolean
+  latitude?: number | null
+  longitude?: number | null
 }
 
 export interface LeaderboardEntry {

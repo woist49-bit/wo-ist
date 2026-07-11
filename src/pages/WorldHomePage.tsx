@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Clock, Trophy } from 'lucide-react'
+import { Clock, Trophy, Globe } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useNow } from '../hooks/useNow'
@@ -171,30 +171,19 @@ export function WorldHomePage() {
       <div className="flex-1 overflow-y-auto overscroll-none min-h-0 px-4 pb-8 pt-5">
         <div className="max-w-lg mx-auto">
           <h2 className="text-lg font-extrabold text-white mb-3">Kampagnen</h2>
-          {campaigns.length === 0 ? (
-            <GameCard className="text-center text-slate-500 py-6">Noch keine Kampagnen</GameCard>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {campaigns.map(c => {
-                const p = progress[c.id] ?? { total: 0, done: 0 }
-                return (
-                  <button key={c.id} onClick={() => navigate(`/world/${worldId}/campaign/${c.id}`)} className="w-full text-left active:translate-y-[2px] transition-transform">
-                    <GameCard>
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="font-extrabold text-slate-800 truncate">{c.title}</p>
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            {c.is_legacy ? 'Legacy' : 'Kampagne'} · {p.done} von {p.total} gefunden
-                          </p>
-                        </div>
-                        <DotProgress total={p.total} done={p.done} />
-                      </div>
-                    </GameCard>
-                  </button>
-                )
-              })}
+          <button onClick={() => navigate(`/world/${worldId}/campaigns`)} className="w-full text-left active:translate-y-[2px] transition-transform">
+            <div className="rounded-[1.5rem] p-5 text-white bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-700 shadow-[0_6px_0_#3730a3,inset_0_2px_0_#ffffff4d]">
+              <div className="flex items-center gap-4">
+                <div className="flex-shrink-0 w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center">
+                  <Globe size={30} strokeWidth={2.5} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xl font-extrabold leading-tight">Kampagnen entdecken</p>
+                  <p className="text-white/85 text-sm mt-0.5">Reise über den Globus zu allen Kampagnen</p>
+                </div>
+              </div>
             </div>
-          )}
+          </button>
 
           <button onClick={leaveWorld} className="block mx-auto mt-8 text-white/40 hover:text-white/60 text-sm transition-colors">
             Spielwelt verlassen
