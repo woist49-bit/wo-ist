@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Globe, { type GlobeMethods } from 'react-globe.gl'
+import * as THREE from 'three'
 import { X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
@@ -63,6 +64,67 @@ function pinSvg(): string {
 }
 function clusterBadge(n: number): string {
   return `<div style="width:28px;height:28px;border-radius:9999px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.55)">${n}</div>`
+}
+
+// ============================================================================
+// DEKORATIVE EFFEKTE (rein optisch, nicht anklickbar, keine Funktion).
+// Bei Ruckeln auf Mobile in dieser Reihenfolge reduzieren: 1) SATELLITES kürzen (max 2),
+// 2) LIGHTNING_MIN/MAX erhöhen. Wolken zuletzt anfassen.
+const CLOUD_OPACITY = 0.42
+const CLOUD_DRIFT_SPEED = 0.006 // rad/s – langsamer, eigenständiger Drift über die Kontinente
+// Satelliten: eigene Umlaufbahn (Radius als Vielfaches des Globusradius), Neigung und
+// Geschwindigkeit je Satellit unterschiedlich, damit es nicht synchron wirkt.
+const SATELLITES = [
+  { orbit: 1.28, tiltX: 0.35, tiltZ: 0.20, speed: 0.28, color: 0xffffff, size: 0.9 },
+  { orbit: 1.46, tiltX: -0.9, tiltZ: 0.55, speed: -0.19, color: 0x93c5fd, size: 1.1 },
+  { orbit: 1.64, tiltX: 1.15, tiltZ: -0.4, speed: 0.14, color: 0xfcd34d, size: 0.8 },
+]
+const LIGHTNING_MIN_MS = 5000
+const LIGHTNING_MAX_MS = 15000
+const LIGHTNING_DURATION_MS = 450
+// ============================================================================
+
+// Prozedurale Wolkentextur (weiche, halbtransparente Bänder) – leichtgewichtig, kein 5-MB-Asset.
+function makeCloudTexture(): THREE.Texture {
+  const w = 1024, h = 512
+  const cv = document.createElement('canvas')
+  cv.width = w; cv.height = h
+  const ctx = cv.getContext('2d')!
+  ctx.clearRect(0, 0, w, h)
+  const draw = (x: number, y: number, rx: number, ry: number, a: number) => {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, rx)
+    g.addColorStop(0, `rgba(255,255,255,${a})`)
+    g.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.save(); ctx.translate(x, y); ctx.scale(1, ry / rx); ctx.translate(-x, -y)
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, rx, 0, Math.PI * 2); ctx.fill(); ctx.restore()
+  }
+  for (let i = 0; i < 240; i++) {
+    const x = Math.random() * w
+    const y = h * 0.5 + (Math.random() - 0.5) * h * 0.92 // weniger an den Polen
+    const rx = 30 + Math.random() * 90
+    const ry = rx * (0.35 + Math.random() * 0.3) // horizontal gestreckt -> Wolkenbänder
+    const a = 0.05 + Math.random() * 0.16
+    draw(x, y, rx, ry, a)
+    if (x < 120) draw(x + w, y, rx, ry, a)        // horizontal nahtlos umlaufend
+    else if (x > w - 120) draw(x - w, y, rx, ry, a)
+  }
+  const tex = new THREE.CanvasTexture(cv)
+  tex.wrapS = THREE.RepeatWrapping
+  return tex
+}
+
+// Weicher Leuchtpunkt (Blitz) via Canvas – additive Sprite-Textur.
+function makeGlowTexture(): THREE.Texture {
+  const s = 64
+  const cv = document.createElement('canvas')
+  cv.width = cv.height = s
+  const ctx = cv.getContext('2d')!
+  const g = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2)
+  g.addColorStop(0, 'rgba(255,255,255,1)')
+  g.addColorStop(0.35, 'rgba(191,222,255,0.65)')
+  g.addColorStop(1, 'rgba(255,255,255,0)')
+  ctx.fillStyle = g; ctx.fillRect(0, 0, s, s)
+  return new THREE.CanvasTexture(cv)
 }
 
 export function CampaignGlobePage() {
@@ -143,6 +205,87 @@ export function CampaignGlobePage() {
       : { lat: 25, lng: 0, altitude: 2.4 }
     g.pointOfView(start, 0)
   }, [ready, pins])
+
+  // Dekorative Effekte (Wolken-Drift, kreisende Satelliten, gelegentliche Blitze) als reine
+  // three.js-Objekte in der Szene – nicht anklickbar, eine gemeinsame rAF-Schleife. Läuft einmal
+  // bei „ready" und räumt bei Unmount alles restlos auf (Geometrien/Materialien/Texturen).
+  useEffect(() => {
+    const g = globeRef.current as any
+    if (!g || !ready) return
+    const scene: THREE.Scene = g.scene()
+    const R: number = g.getGlobeRadius()
+    const added: THREE.Object3D[] = []
+    const disposables: Array<{ dispose: () => void }> = []
+
+    // --- Wolken-Schicht: leicht größere Kugel, eigene Rotation (Drift) ---
+    const cloudTex = makeCloudTexture()
+    const cloudGeo = new THREE.SphereGeometry(R * 1.015, 40, 30)
+    const cloudMat = new THREE.MeshPhongMaterial({ map: cloudTex, transparent: true, opacity: CLOUD_OPACITY, depthWrite: false })
+    const clouds = new THREE.Mesh(cloudGeo, cloudMat)
+    scene.add(clouds); added.push(clouds); disposables.push(cloudTex, cloudGeo, cloudMat)
+
+    // --- Satelliten: je eigener geneigter Orbit + Tempo ---
+    const orbits = SATELLITES.map(cfg => {
+      const pivot = new THREE.Group()
+      pivot.rotation.set(cfg.tiltX, 0, cfg.tiltZ)
+      const orbit = new THREE.Group()
+      orbit.rotation.y = Math.random() * Math.PI * 2 // zufällige Startphase
+      const bodyGeo = new THREE.SphereGeometry(R * 0.01 * cfg.size, 8, 8)
+      const bodyMat = new THREE.MeshBasicMaterial({ color: cfg.color })
+      const body = new THREE.Mesh(bodyGeo, bodyMat)
+      body.position.set(R * cfg.orbit, 0, 0)
+      orbit.add(body); pivot.add(orbit); scene.add(pivot)
+      added.push(pivot); disposables.push(bodyGeo, bodyMat)
+      return { orbit, speed: cfg.speed }
+    })
+
+    // --- Blitze: ein additives Sprite, wird zufällig positioniert und kurz aufgeblendet ---
+    const glowTex = makeGlowTexture()
+    const glowMat = new THREE.SpriteMaterial({ map: glowTex, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending })
+    const flash = new THREE.Sprite(glowMat)
+    flash.scale.setScalar(R * 0.16)
+    flash.visible = false
+    scene.add(flash); added.push(flash); disposables.push(glowTex, glowMat)
+
+    let flashStart = 0
+    let flashTimer = 0
+    const scheduleFlash = () => {
+      flashTimer = window.setTimeout(() => {
+        const lat = Math.random() * 180 - 90
+        const lng = Math.random() * 360 - 180
+        const p = g.getCoords(lat, lng, 0.02)
+        flash.position.set(p.x, p.y, p.z)
+        flash.visible = true
+        flashStart = performance.now()
+        scheduleFlash()
+      }, LIGHTNING_MIN_MS + Math.random() * (LIGHTNING_MAX_MS - LIGHTNING_MIN_MS))
+    }
+    scheduleFlash()
+
+    // --- Eine gemeinsame Animationsschleife für alle drei Effekte ---
+    let raf = 0
+    let last = performance.now()
+    const tick = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000)
+      last = now
+      clouds.rotation.y += CLOUD_DRIFT_SPEED * dt
+      for (const o of orbits) o.orbit.rotation.y += o.speed * dt
+      if (flash.visible) {
+        const t = (now - flashStart) / LIGHTNING_DURATION_MS
+        if (t >= 1) { flash.visible = false; glowMat.opacity = 0 }
+        else { const env = t < 0.2 ? t / 0.2 : 1 - (t - 0.2) / 0.8; glowMat.opacity = Math.max(0, env) * 0.9 }
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+
+    return () => {
+      cancelAnimationFrame(raf)
+      clearTimeout(flashTimer)
+      for (const o of added) scene.remove(o)
+      for (const d of disposables) d.dispose()
+    }
+  }, [ready])
 
   const clusters = useMemo(() => clusterPins(pins, clusterRadius), [pins, clusterRadius])
 
