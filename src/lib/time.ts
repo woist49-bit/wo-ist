@@ -20,6 +20,36 @@ export function formatClock(hour: number, minute: number): string {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
 }
 
+// Offset von Europe/Berlin gegenüber UTC (ms) zum gegebenen Zeitpunkt – DST-korrekt via Intl.
+function berlinOffsetMs(epochMs: number): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Europe/Berlin', hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(new Date(epochMs))
+  const p: Record<string, number> = {}
+  for (const part of parts) if (part.type !== 'literal') p[part.type] = Number(part.value)
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - epochMs
+}
+
+// Wandelt eine WANDUHRZEIT in Europe/Berlin (Datum "YYYY-MM-DD" + Stunde/Minute) in einen
+// UTC-ISO-String um. So ist die gespeicherte Zeit unabhängig von der Geräte-Zeitzone des Admins:
+// alle Spieler bekommen dasselbe absolute UTC-Freischaltinstant. DST-Randfälle über zwei Iterationen.
+export function berlinWallTimeToUtcISO(dateYmd: string, hour: number, minute: number): string {
+  const [y, mo, d] = dateYmd.split('-').map(Number)
+  const asIfUtc = Date.UTC(y, mo - 1, d, hour, minute, 0)
+  let utc = asIfUtc - berlinOffsetMs(asIfUtc)
+  utc = asIfUtc - berlinOffsetMs(utc)
+  return new Date(utc).toISOString()
+}
+
+// Kalenderdatum "YYYY-MM-DD" eines Zeitpunkts in Europe/Berlin (für die Tages-Slot-Berechnung).
+export function berlinDateYmd(epochMs: number): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date(epochMs))
+}
+
 // "heute" / "morgen" / "am 03.07." – relativ zum aktuellen Kalendertag.
 export function relativeDay(target: Date, now: Date): string {
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()

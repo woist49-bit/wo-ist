@@ -6,7 +6,7 @@ import { Button } from '../ui/Button'
 import { Avatar } from '../ui/Avatar'
 import { SHOP_ITEMS, getShopItem, DEBUFF_ITEM_KEYS, PRE_ROUND_ITEM_KEYS, type ShopItem } from '../../lib/shop'
 import { formatCountdown } from '../../lib/time'
-import { useNow } from '../../hooks/useNow'
+import { useServerNow } from '../../hooks/useServerNow'
 import type { EventImage, PlayerAttempt } from '../../types'
 
 export type ImageStatus = 'locked' | 'open' | 'played'
@@ -30,7 +30,7 @@ interface Props {
 
 export function EventImagePopup({ image, index, status, attempt, inventory, onClose, onPlay, onViewResult, onChanged }: Props) {
   const { addToast } = useToast()
-  const now = useNow(1000)
+  const now = useServerNow(1000)
   const [busy, setBusy] = useState(false)
 
   // Vor-Runden-Items, die für DIESES Bild schon scharf gestellt wurden (nicht mehr abwählbar)

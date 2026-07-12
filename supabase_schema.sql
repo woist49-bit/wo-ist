@@ -242,14 +242,29 @@ create policy "Admins can manage images" on event_images for all
 -- player_attempts
 create policy "Users can view own attempts" on player_attempts for select
   using (auth.uid() = user_id);
+-- Insert nur fuer eigene Versuche UND nur wenn das Bild serverseitig bereits freigeschaltet ist
+-- (unlocks_at <= now()). Verhindert vorzeitiges Spielen durch manipulierte Geraete-Uhr/Client.
+-- Betrifft nur Live-Events (Kampagnen laufen ueber campaign_progress, nicht player_attempts).
 create policy "Users can insert own attempt" on player_attempts for insert
-  with check (auth.uid() = user_id);
+  with check (
+    auth.uid() = user_id
+    and exists (
+      select 1 from event_images ei
+      where ei.id = player_attempts.image_id and ei.unlocks_at <= now()
+    )
+  );
 create policy "Admins can view all attempts" on player_attempts for select
   using (exists (
     select 1 from event_images ei
     join world_members wm on wm.world_id = ei.world_id
     where ei.id = player_attempts.image_id and wm.user_id = auth.uid() and wm.role = 'admin'
   ));
+
+-- Autoritative Serverzeit (UTC). Das Frontend synchronisiert damit seine Countdowns/Freischalt-
+-- Anzeige, statt der manipulierbaren Geraete-Uhr zu vertrauen.
+create or replace function server_now() returns timestamptz
+  language sql stable as $$ select now() $$;
+grant execute on function server_now() to anon, authenticated;
 
 -- campaigns
 create policy "Members can view campaigns" on campaigns for select

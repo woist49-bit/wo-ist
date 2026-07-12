@@ -4,6 +4,7 @@ import { BadgeCheck, MoreVertical } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { levelFromXp } from '../../lib/scoring'
+import { berlinWallTimeToUtcISO } from '../../lib/time'
 import { FramedAvatar } from '../../components/ui/FramedAvatar'
 import { Button } from '../../components/ui/Button'
 import { GameCard } from '../../components/ui/GameCard'
@@ -113,9 +114,11 @@ export function AdminPage() {
     setCreating(true)
     setError('')
 
+    // Uhrzeit wird konsistent als Europe/Berlin interpretiert und als UTC gespeichert –
+    // unabhängig von der Geräte-Zeitzone des Admins.
     const [hours, minutes] = newReleaseTime.split(':').map(Number)
-    const startsAt = new Date(`${newStartDate}T${newReleaseTime}:00`).toISOString()
-    const endsAt = new Date(`${newEndDate}T${newReleaseTime}:00`).toISOString()
+    const startsAt = berlinWallTimeToUtcISO(newStartDate, hours, minutes)
+    const endsAt = berlinWallTimeToUtcISO(newEndDate, hours, minutes)
 
     const { data, error: err } = await supabase.from('live_events').insert({
       world_id: worldId,
@@ -225,7 +228,10 @@ export function AdminPage() {
               </div>
               <Input tone="light" label="Startdatum" type="date" value={newStartDate} onChange={e => setNewStartDate(e.target.value)} />
               <Input tone="light" label="Enddatum" type="date" value={newEndDate} onChange={e => setNewEndDate(e.target.value)} />
-              <Input tone="light" label="Uhrzeit (tägliche Freischaltung)" type="time" value={newReleaseTime} onChange={e => setNewReleaseTime(e.target.value)} />
+              <div>
+                <Input tone="light" label="Uhrzeit tägliche Freischaltung" type="time" value={newReleaseTime} onChange={e => setNewReleaseTime(e.target.value)} />
+                <p className="text-xs text-slate-500 mt-1">Gilt in der Zeitzone <span className="font-semibold">Europe/Berlin</span> – für alle Spieler gleich.</p>
+              </div>
               <div>
                 <label className="text-sm font-medium text-slate-600 mb-1 block">Standort (Pflicht) – für den Globus</label>
                 <LocationPicker lat={newLat} lng={newLng} onChange={(la, lo) => { setNewLat(la); setNewLng(lo) }} />

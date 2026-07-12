@@ -77,6 +77,15 @@ export function ImageGamePage() {
       else navigate(-1)
       return
     }
+    // Live-Event-Bild erst ab serverseitiger Freischaltung spielbar/ansehbar (keine manipulierte
+    // Geräte-Uhr). Kampagnen sind immer spielbar. Vergleich gegen autoritative Serverzeit.
+    if (!isCampaign && imgRes.data?.unlocks_at && imgRes.data.event_id) {
+      const { data: srv } = await supabase.rpc('server_now')
+      if (srv && new Date(imgRes.data.unlocks_at).getTime() > new Date(srv as string).getTime()) {
+        navigate(`/world/${worldId}/event/${imgRes.data.event_id}`, { replace: true })
+        return
+      }
+    }
     setImage(imgRes.data)
     setLiveAttempt(attRes.data)
 

@@ -3,11 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Search, Clock, Lock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useNow } from '../hooks/useNow'
+import { useServerNow } from '../hooks/useServerNow'
 import { useToast } from '../stores/toast'
 import { levelFromXp } from '../lib/scoring'
 import { getShopItem } from '../lib/shop'
-import { formatCountdown, relativeDay, IMAGE_PLAY_WINDOW_MS } from '../lib/time'
+import { formatCountdown, relativeDay, IMAGE_PLAY_WINDOW_MS, berlinWallTimeToUtcISO, berlinDateYmd } from '../lib/time'
 import { GameCard } from '../components/ui/GameCard'
 import { FramedAvatar } from '../components/ui/FramedAvatar'
 import { EventImagePopup, type ImageStatus } from '../components/event/EventImagePopup'
@@ -25,7 +25,7 @@ export function EventPage() {
   const { user } = useAuth()
   const { addToast } = useToast()
   const navigate = useNavigate()
-  const now = useNow(1000)
+  const now = useServerNow(1000)
   const [event, setEvent] = useState<LiveEvent | null>(null)
   const [images, setImages] = useState<EventImage[]>([])
   const [attempts, setAttempts] = useState<Map<string, PlayerAttempt>>(new Map())
@@ -361,16 +361,18 @@ function ItemChip({ itemKey, count, tone, onTap }: { itemKey: string; count: num
   )
 }
 
-// Alle Tages-Slots des Events (Start bis Ende, jeweils zur täglichen Freigabezeit)
+// Alle Tages-Slots des Events (Start bis Ende, jeweils zur täglichen Freigabezeit).
+// In Europe/Berlin gerechnet -> exakt dieselben absoluten Zeitpunkte wie die gespeicherten
+// unlocks_at, unabhängig von der Geräte-Zeitzone des Spielers.
 function buildSlots(event: LiveEvent): number[] {
-  const start = new Date(event.starts_at)
-  const end = new Date(event.ends_at)
-  const d = new Date(start.getFullYear(), start.getMonth(), start.getDate(), event.daily_release_hour, event.daily_release_minute, 0, 0)
-  const endMs = new Date(end.getFullYear(), end.getMonth(), end.getDate(), event.daily_release_hour, event.daily_release_minute, 0, 0).getTime()
+  const endYmd = berlinDateYmd(new Date(event.ends_at).getTime())
+  const cursor = new Date(berlinDateYmd(new Date(event.starts_at).getTime()) + 'T00:00:00Z')
+  const endCursor = new Date(endYmd + 'T00:00:00Z').getTime()
   const slots: number[] = []
-  for (let i = 0; i < 366 && d.getTime() <= endMs; i++) {
-    slots.push(d.getTime())
-    d.setDate(d.getDate() + 1)
+  for (let i = 0; i < 366 && cursor.getTime() <= endCursor; i++) {
+    const ymd = cursor.toISOString().slice(0, 10)
+    slots.push(new Date(berlinWallTimeToUtcISO(ymd, event.daily_release_hour, event.daily_release_minute)).getTime())
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
   }
   return slots
 }

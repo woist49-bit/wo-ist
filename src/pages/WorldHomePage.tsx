@@ -3,8 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Clock, Trophy, Globe } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useNow } from '../hooks/useNow'
-import { formatClock, formatCountdown } from '../lib/time'
+import { useServerNow } from '../hooks/useServerNow'
+import { formatCountdown } from '../lib/time'
 import { Button } from '../components/ui/Button'
 import { GameCard } from '../components/ui/GameCard'
 import type { World, LiveEvent, Campaign, WorldMember } from '../types'
@@ -26,7 +26,7 @@ export function WorldHomePage() {
   const [resultDialog, setResultDialog] = useState(false)
   const [showCode, setShowCode] = useState(false)
   const [loading, setLoading] = useState(true)
-  const now = useNow(1000)
+  const now = useServerNow(1000)
 
   useEffect(() => { if (worldId && user) load() }, [worldId, user])
 
@@ -137,7 +137,7 @@ export function WorldHomePage() {
                   <div className="mt-3 inline-flex items-center gap-1.5 bg-white/25 rounded-full px-3 py-1 text-sm font-semibold">
                     <Clock size={14} strokeWidth={2.5} className="flex-shrink-0" />
                     <span>Nächstes Bild in {formatCountdown(nextUnlockMs - now)}</span>
-                    <span className="text-white/70 font-normal">· {formatClock(activeEvent.daily_release_hour, activeEvent.daily_release_minute)} Uhr</span>
+                    <span className="text-white/70 font-normal">· {new Date(nextUnlockMs).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr</span>
                   </div>
                 ) : activeEventUnlocks.length > 0 ? (
                   <p className="mt-3 text-sm font-semibold text-white/85">Alle Bilder freigeschaltet</p>

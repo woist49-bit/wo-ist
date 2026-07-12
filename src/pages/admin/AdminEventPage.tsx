@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/Button'
 import { GameCard } from '../../components/ui/GameCard'
 import { Input } from '../../components/ui/Input'
 import { DescriptionInput } from '../../components/ui/DescriptionInput'
+import { berlinWallTimeToUtcISO } from '../../lib/time'
 import { BoundingBoxEditor } from '../../components/marker/BoundingBoxEditor'
 import type { LiveEvent, EventImage } from '../../types'
 
@@ -51,7 +52,8 @@ export function AdminEventPage() {
     if (uploadErr) { setUploadError(uploadErr.message); setUploading(false); return }
 
     const { data: urlData } = supabase.storage.from('game-images').getPublicUrl(path)
-    const unlocksAt = new Date(`${unlocksDate}T${String(event.daily_release_hour).padStart(2, '0')}:${String(event.daily_release_minute).padStart(2, '0')}:00`).toISOString()
+    // Freischaltzeit = eingestellter Tag + tägliche Uhrzeit, interpretiert als Europe/Berlin -> UTC.
+    const unlocksAt = berlinWallTimeToUtcISO(unlocksDate, event.daily_release_hour, event.daily_release_minute)
 
     const { data: img, error: dbErr } = await supabase.from('event_images').insert({
       event_id: eventId,
