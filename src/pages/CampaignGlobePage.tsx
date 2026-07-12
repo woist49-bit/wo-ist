@@ -100,8 +100,8 @@ const CLOUD_DRIFT_MAX = 0.055
 // auf der kameranahen Halbkugel auf, zieht ruhig vorbei und verschwindet auf der Rückseite;
 // danach zufällige Pause, dann neue zufällige Bahn.
 const SAT_COUNT = 2                // Slots -> niemals mehr als 2 gleichzeitig sichtbar
-const SAT_ORBIT_MIN = 1.55         // Bahnradius (× Erdradius) – klar außerhalb der Wolken
-const SAT_ORBIT_MAX = 1.9
+const SAT_ORBIT_MIN = 1.2          // Bahnradius (× Erdradius) – nur etwas höher als die Wolken (~1.1)
+const SAT_ORBIT_MAX = 1.3
 const SAT_SPEED_MIN = 0.11         // rad/s – ruhig & langsam
 const SAT_SPEED_MAX = 0.19
 const SAT_PAUSE_MIN_MS = 5000
