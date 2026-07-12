@@ -425,7 +425,7 @@ function LegacyCampaignForm({ worldId, onCreated }: { worldId: string; onCreated
   return (
     <div className="flex flex-col gap-3">
       <Input tone="light" placeholder="Urlaub 2022" value={title} onChange={e => setTitle(e.target.value)} />
-      <DescriptionInput value={desc} onChange={setDesc} />
+      <DescriptionInput value={desc} onChange={setDesc} placeholder="z. B. 10 Tage Abenteuer in der Südsee!" />
       <div>
         <label className="text-sm font-medium text-slate-600 mb-1 block">Standort (Pflicht) – für den Globus</label>
         <LocationPicker lat={lat} lng={lng} onChange={(la, lo) => { setLat(la); setLng(lo) }} />

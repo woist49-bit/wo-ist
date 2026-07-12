@@ -108,7 +108,7 @@ export function AdminCampaignPage() {
         <>
           <GameCard className="mb-6">
             <h2 className="font-extrabold text-slate-800 mb-3">Beschreibung</h2>
-            <DescriptionInput value={campDesc} onChange={setCampDesc} />
+            <DescriptionInput value={campDesc} onChange={setCampDesc} placeholder="z. B. 10 Tage Abenteuer in der Südsee!" />
             <Button size="sm" variant="secondary" className="mt-3" onClick={saveCampDesc} loading={campDescSaving}>Beschreibung speichern</Button>
           </GameCard>
 
