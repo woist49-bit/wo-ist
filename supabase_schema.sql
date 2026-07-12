@@ -128,6 +128,9 @@ create table campaigns (
 alter table campaigns add column if not exists latitude float8;
 alter table campaigns add column if not exists longitude float8;
 
+-- Optionale Kampagnen-Beschreibung (max. 300 Zeichen, im Frontend erzwungen)
+alter table campaigns add column if not exists description text;
+
 -- Legacy-Kampagnen haben eigene Bilder (Event-Kampagnen nutzen die Bilder des Original-Events)
 alter table event_images add column if not exists campaign_id uuid references campaigns(id) on delete cascade;
 

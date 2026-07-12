@@ -345,6 +345,10 @@ export function CampaignGlobePage() {
               {selected.total} {selected.total === 1 ? 'Bild' : 'Bilder'} · {selected.done} gefunden
             </p>
 
+            {selected.campaign.description && (
+              <p className="text-sm text-slate-600 mt-2 whitespace-pre-line">{selected.campaign.description}</p>
+            )}
+
             {selected.total > 0 && (
               <div className="flex flex-wrap gap-1.5 my-3">
                 {Array.from({ length: selected.total }).map((_, i) => (

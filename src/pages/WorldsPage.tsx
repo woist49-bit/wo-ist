@@ -1,6 +1,6 @@
 import { useState, useEffect, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users, Layers, GraduationCap, Check } from 'lucide-react'
+import { Users, Layers, GraduationCap, Check, Crown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { Button } from '../components/ui/Button'
@@ -15,6 +15,7 @@ export function WorldsPage() {
   const navigate = useNavigate()
   const [worlds, setWorlds] = useState<World[]>([])
   const [stats, setStats] = useState<Record<string, WorldStats>>({})
+  const [roles, setRoles] = useState<Record<string, string>>({})
   const [showCreate, setShowCreate] = useState(false)
   const [showJoin, setShowJoin] = useState(false)
   const [newName, setNewName] = useState('')
@@ -29,11 +30,15 @@ export function WorldsPage() {
     if (!user) return
     const { data } = await supabase
       .from('world_members')
-      .select('world_id, worlds(*)')
+      .select('world_id, role, worlds(*)')
       .eq('user_id', user.id)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ws = (data ?? []).map((r: any) => r.worlds).filter(Boolean) as World[]
+    const rows = (data ?? []) as any[]
+    const ws = rows.map(r => r.worlds).filter(Boolean) as World[]
     setWorlds(ws)
+    const roleMap: Record<string, string> = {}
+    for (const r of rows) if (r.world_id) roleMap[r.world_id] = r.role
+    setRoles(roleMap)
 
     const ids = ws.map(w => w.id)
     if (!ids.length) { setStats({}); return }
@@ -183,9 +188,15 @@ export function WorldsPage() {
           <div className="flex flex-col gap-3">
             {worlds.map(w => {
               const s = stats[w.id]
+              const isAdmin = roles[w.id] === 'admin'
               return (
-                <button key={w.id} onClick={() => navigate(`/world/${w.id}`)} className="w-full text-left active:translate-y-[2px] transition-transform">
-                  <GameCard>
+                <button key={w.id} onClick={() => navigate(`/world/${w.id}`)} className="relative w-full text-left active:translate-y-[2px] transition-transform">
+                  {isAdmin && (
+                    <span className="absolute -top-2 right-4 z-10 inline-flex items-center gap-1 bg-amber-400 text-amber-950 rounded-full px-2 py-0.5 text-[11px] font-extrabold shadow-[0_2px_0_#0000002e,inset_0_1px_0_#ffffff80]">
+                      <Crown size={12} strokeWidth={2.75} /> Admin
+                    </span>
+                  )}
+                  <GameCard style={isAdmin ? { borderColor: '#f59e0b' } : undefined}>
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">

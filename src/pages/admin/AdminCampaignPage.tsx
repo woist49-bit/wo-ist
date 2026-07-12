@@ -22,6 +22,8 @@ export function AdminCampaignPage() {
   const [uploadError, setUploadError] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editDesc, setEditDesc] = useState('')
+  const [campDesc, setCampDesc] = useState('')
+  const [campDescSaving, setCampDescSaving] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { load() }, [campaignId])
@@ -29,6 +31,7 @@ export function AdminCampaignPage() {
   async function load() {
     const { data: camp } = await supabase.from('campaigns').select('*').eq('id', campaignId).single()
     setCampaign(camp)
+    setCampDesc(camp?.description ?? '')
     if (camp) {
       const q = camp.original_event_id
         ? supabase.from('event_images').select('*').eq('event_id', camp.original_event_id)
@@ -79,6 +82,14 @@ export function AdminCampaignPage() {
     setImages(prev => prev.filter(i => i.id !== id))
   }
 
+  async function saveCampDesc() {
+    const d = campDesc.trim() || null
+    setCampDescSaving(true)
+    await supabase.from('campaigns').update({ description: d }).eq('id', campaignId)
+    setCampaign(prev => prev ? { ...prev, description: d } : prev)
+    setCampDescSaving(false)
+  }
+
   if (loading) return <LoadingScreen />
   if (!campaign) return <div className="p-8 text-center text-white/50">Kampagne nicht gefunden.</div>
 
@@ -95,6 +106,12 @@ export function AdminCampaignPage() {
         </GameCard>
       ) : (
         <>
+          <GameCard className="mb-6">
+            <h2 className="font-extrabold text-slate-800 mb-3">Beschreibung</h2>
+            <DescriptionInput value={campDesc} onChange={setCampDesc} />
+            <Button size="sm" variant="secondary" className="mt-3" onClick={saveCampDesc} loading={campDescSaving}>Beschreibung speichern</Button>
+          </GameCard>
+
           <GameCard className="mb-6">
             <h2 className="font-extrabold text-slate-800 mb-4">📷 Bild hochladen</h2>
             <input

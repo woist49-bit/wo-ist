@@ -8,6 +8,7 @@ import { FramedAvatar } from '../../components/ui/FramedAvatar'
 import { Button } from '../../components/ui/Button'
 import { GameCard } from '../../components/ui/GameCard'
 import { Input } from '../../components/ui/Input'
+import { DescriptionInput } from '../../components/ui/DescriptionInput'
 import { LocationPicker } from '../../components/admin/LocationPicker'
 import type { WorldMember, LiveEvent, Profile, Campaign, World } from '../../types'
 
@@ -405,6 +406,7 @@ export function AdminPage() {
 
 function LegacyCampaignForm({ worldId, onCreated }: { worldId: string; onCreated: (campaignId: string) => void }) {
   const [title, setTitle] = useState('')
+  const [desc, setDesc] = useState('')
   const [lat, setLat] = useState<number | null>(null)
   const [lng, setLng] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
@@ -414,8 +416,8 @@ function LegacyCampaignForm({ worldId, onCreated }: { worldId: string; onCreated
     if (!title) return
     if (lat == null || lng == null) { setError('Bitte einen Standort auf der Karte festlegen.'); return }
     setLoading(true); setError('')
-    const { data } = await supabase.from('campaigns').insert({ world_id: worldId, title, original_event_id: null, is_legacy: true, latitude: lat, longitude: lng }).select().single()
-    setTitle(''); setLat(null); setLng(null)
+    const { data } = await supabase.from('campaigns').insert({ world_id: worldId, title, description: desc.trim() || null, original_event_id: null, is_legacy: true, latitude: lat, longitude: lng }).select().single()
+    setTitle(''); setDesc(''); setLat(null); setLng(null)
     setLoading(false)
     if (data) onCreated(data.id)
   }
@@ -423,6 +425,7 @@ function LegacyCampaignForm({ worldId, onCreated }: { worldId: string; onCreated
   return (
     <div className="flex flex-col gap-3">
       <Input tone="light" placeholder="Urlaub 2022" value={title} onChange={e => setTitle(e.target.value)} />
+      <DescriptionInput value={desc} onChange={setDesc} />
       <div>
         <label className="text-sm font-medium text-slate-600 mb-1 block">Standort (Pflicht) – für den Globus</label>
         <LocationPicker lat={lat} lng={lng} onChange={(la, lo) => { setLat(la); setLng(lo) }} />

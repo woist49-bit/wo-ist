@@ -99,6 +99,7 @@ export interface Campaign {
   is_legacy: boolean
   latitude?: number | null
   longitude?: number | null
+  description?: string | null
 }
 
 export interface LeaderboardEntry {
