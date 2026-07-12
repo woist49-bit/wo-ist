@@ -80,7 +80,7 @@ const CLOUD_REGIONS = [            // Ballungszentren; dazwischen bleibt es wolk
   { lat: -12, lng: 130 },
   { lat: 48, lng: 25 },
 ]
-const CLOUD_CLUSTERS_PER_REGION = 3   // -> ~9 Cluster
+const CLOUD_CLUSTERS_PER_REGION = 10   // -> ~30 Cluster (deutlich vollere Wolkenregionen)
 const CLOUD_DRIFT_MIN = 0.03           // rad/s – bewusst nicht zu langsam
 const CLOUD_DRIFT_MAX = 0.055
 // Satelliten: eigene Umlaufbahn (Radius als Vielfaches des Globusradius), Neigung und
@@ -207,8 +207,8 @@ export function CampaignGlobePage() {
     const cloudPivots: Array<{ pivot: THREE.Object3D; speed: number }> = []
     for (const region of CLOUD_REGIONS) {
       for (let k = 0; k < CLOUD_CLUSTERS_PER_REGION; k++) {
-        const lat = region.lat + (Math.random() - 0.5) * 30
-        const lng = region.lng + (Math.random() - 0.5) * 40
+        const lat = region.lat + (Math.random() - 0.5) * 42
+        const lng = region.lng + (Math.random() - 0.5) * 60
         const pivot = new THREE.Group() // im Ursprung -> Rotation.y dreht den Cluster um die Erdachse
         const clump = new THREE.Group()
         const pos = g.getCoords(lat, lng, CLOUD_ALTITUDE)
