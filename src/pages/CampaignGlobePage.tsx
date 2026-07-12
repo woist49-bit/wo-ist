@@ -12,6 +12,19 @@ const EARTH_TEX = '/textures/earth-day.jpg'
 
 interface Pin { campaign: Campaign; lat: number; lng: number; total: number; done: number }
 interface Cluster { lat: number; lng: number; items: Pin[] }
+interface Sat {
+  group: THREE.Group
+  mats: THREE.MeshStandardMaterial[]
+  active: boolean
+  nextAt: number       // Zeitpunkt (performance.now), ab dem der Slot wieder erscheinen darf
+  quat: THREE.Quaternion // Ausrichtung der Bahn-Ebene
+  theta: number        // Winkel auf der Kreisbahn
+  dir: number          // Umlaufrichtung (+1/-1)
+  speed: number        // rad/s
+  radius: number       // Bahnradius (Weltkoordinaten)
+  entered: boolean     // war in diesem Durchlauf schon sichtbar
+  startTheta: number   // Startwinkel (für Bogen-Sicherung gegen hängende Slots)
+}
 
 // ============================================================================
 // CLUSTER-RADIUS – hier justieren, wie früh nahe Pins zusammengefasst werden.
@@ -68,8 +81,8 @@ function clusterBadge(n: number): string {
 
 // ============================================================================
 // DEKORATIVE EFFEKTE (rein optisch, nicht anklickbar, keine Funktion).
-// Bei Ruckeln auf Mobile in dieser Reihenfolge reduzieren: 1) SATELLITES kürzen (max 2),
-// 2) LIGHTNING_MIN/MAX erhöhen. Wolken zuletzt anfassen.
+// Bei Ruckeln auf Mobile in dieser Reihenfolge reduzieren: 1) SAT_COUNT auf 1 setzen,
+// 2) LIGHTNING_MIN/MAX_MS erhöhen. Wolken zuletzt anfassen.
 // Wolken: 6–10 Cluster aus je 3–5 überlappenden weißen Low-Poly-Kugeln (Cartoon-Puschel),
 // in wenigen Regionen geballt (große Lücken dazwischen), je eigener Drift um die Erdachse.
 const CLOUD_OPACITY = 0.9
@@ -83,13 +96,16 @@ const CLOUD_REGIONS = [            // Ballungszentren; dazwischen bleibt es wolk
 const CLOUD_CLUSTERS_PER_REGION = 10   // -> ~30 Cluster (deutlich vollere Wolkenregionen)
 const CLOUD_DRIFT_MIN = 0.03           // rad/s – bewusst nicht zu langsam
 const CLOUD_DRIFT_MAX = 0.055
-// Satelliten: eigene Umlaufbahn (Radius als Vielfaches des Globusradius), Neigung und
-// Geschwindigkeit je Satellit unterschiedlich, damit es nicht synchron wirkt.
-const SATELLITES = [
-  { orbit: 1.28, tiltX: 0.35, tiltZ: 0.20, speed: 0.28, color: 0xffffff, size: 0.9 },
-  { orbit: 1.46, tiltX: -0.9, tiltZ: 0.55, speed: -0.19, color: 0x93c5fd, size: 1.1 },
-  { orbit: 1.64, tiltX: 1.15, tiltZ: -0.4, speed: 0.14, color: 0xfcd34d, size: 0.8 },
-]
+// Satelliten: 1–2 gleichzeitig sichtbar. Jeder taucht auf einer zufällig geneigten Kreisbahn
+// auf der kameranahen Halbkugel auf, zieht ruhig vorbei und verschwindet auf der Rückseite;
+// danach zufällige Pause, dann neue zufällige Bahn.
+const SAT_COUNT = 2                // Slots -> niemals mehr als 2 gleichzeitig sichtbar
+const SAT_ORBIT_MIN = 1.55         // Bahnradius (× Erdradius) – klar außerhalb der Wolken
+const SAT_ORBIT_MAX = 1.9
+const SAT_SPEED_MIN = 0.11         // rad/s – ruhig & langsam
+const SAT_SPEED_MAX = 0.19
+const SAT_PAUSE_MIN_MS = 5000
+const SAT_PAUSE_MAX_MS = 20000
 const LIGHTNING_MIN_MS = 5000
 const LIGHTNING_MAX_MS = 15000
 const LIGHTNING_DURATION_MS = 450
@@ -232,20 +248,35 @@ export function CampaignGlobePage() {
       }
     }
 
-    // --- Satelliten: je eigener geneigter Orbit + Tempo ---
-    const orbits = SATELLITES.map(cfg => {
-      const pivot = new THREE.Group()
-      pivot.rotation.set(cfg.tiltX, 0, cfg.tiltZ)
-      const orbit = new THREE.Group()
-      orbit.rotation.y = Math.random() * Math.PI * 2 // zufällige Startphase
-      const bodyGeo = new THREE.SphereGeometry(R * 0.01 * cfg.size, 8, 8)
-      const bodyMat = new THREE.MeshBasicMaterial({ color: cfg.color })
-      const body = new THREE.Mesh(bodyGeo, bodyMat)
-      body.position.set(R * cfg.orbit, 0, 0)
-      orbit.add(body); pivot.add(orbit); scene.add(pivot)
-      added.push(pivot); disposables.push(bodyGeo, bodyMat)
-      return { orbit, speed: cfg.speed }
-    })
+    // --- Satelliten: Modell aus Basis-Geometrien (Korpus-Box + 2 flache Solarpanele) ---
+    // Geometrien werden geteilt; Materialien pro Satellit eigen (für unabhängiges Ein-/Ausblenden).
+    const satUnit = R * 0.026
+    const satBodyGeo = new THREE.BoxGeometry(satUnit * 0.9, satUnit * 0.7, satUnit * 0.7)
+    const satPanelGeo = new THREE.BoxGeometry(satUnit * 1.5, satUnit * 0.85, satUnit * 0.06)
+    const panelOffset = satUnit * 1.35
+    disposables.push(satBodyGeo, satPanelGeo)
+
+    const sats: Sat[] = []
+    for (let i = 0; i < SAT_COUNT; i++) {
+      const group = new THREE.Group()
+      const bodyMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, metalness: 0.85, roughness: 0.35, transparent: true, opacity: 0 })
+      const panelMat = new THREE.MeshStandardMaterial({ color: 0x1e40af, metalness: 0.5, roughness: 0.4, emissive: 0x0a1a4d, emissiveIntensity: 0.3, transparent: true, opacity: 0 })
+      const body = new THREE.Mesh(satBodyGeo, bodyMat)
+      const pL = new THREE.Mesh(satPanelGeo, panelMat); pL.position.x = -panelOffset
+      const pR = new THREE.Mesh(satPanelGeo, panelMat); pR.position.x = panelOffset
+      group.add(body, pL, pR)
+      group.visible = false
+      scene.add(group); added.push(group); disposables.push(bodyMat, panelMat)
+      sats.push({
+        group, mats: [bodyMat, panelMat], active: false,
+        nextAt: performance.now() + 800 + Math.random() * 7000, // gestaffelter Start
+        quat: new THREE.Quaternion(), theta: 0, dir: 1, speed: 0, radius: 0, entered: false, startTheta: 0,
+      })
+    }
+    // Wiederverwendete Temp-Objekte (keine Allokation pro Frame)
+    const _v = new THREE.Vector3(), _camDir = new THREE.Vector3(), _ux = new THREE.Vector3(), _uz = new THREE.Vector3()
+    const smoothstep = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t) }
+    const randomQuat = () => new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random() * Math.PI * 2, Math.random() * Math.PI * 2, Math.random() * Math.PI * 2))
 
     // --- Blitze: ein additives Sprite, wird zufällig positioniert und kurz aufgeblendet ---
     const glowTex = makeGlowTexture()
@@ -277,7 +308,46 @@ export function CampaignGlobePage() {
       const dt = Math.min(0.05, (now - last) / 1000)
       last = now
       for (const c of cloudPivots) c.pivot.rotation.y += c.speed * dt
-      for (const o of orbits) o.orbit.rotation.y += o.speed * dt
+
+      // Satelliten: nur auf der kameranahen Halbkugel sichtbar; danach Pause + neue Bahn.
+      const cam = g.camera()
+      _camDir.copy(cam.position).normalize()
+      for (const s of sats) {
+        if (!s.active) {
+          if (now < s.nextAt) continue
+          // Aktivieren: zufällige Bahn-Ebene, Start am Eintrittsrand der sichtbaren Halbkugel.
+          // Sichtbarer Bogen liegt um phi (Zentrum), Eintritt bei phi - dir*(pi/2).
+          s.quat = randomQuat()
+          _ux.set(1, 0, 0).applyQuaternion(s.quat)
+          _uz.set(0, 0, 1).applyQuaternion(s.quat)
+          const phi = Math.atan2(_uz.dot(_camDir), _ux.dot(_camDir))
+          s.dir = Math.random() < 0.5 ? 1 : -1
+          s.theta = phi - s.dir * (Math.PI / 2 + 0.2)
+          s.startTheta = s.theta
+          s.radius = R * (SAT_ORBIT_MIN + Math.random() * (SAT_ORBIT_MAX - SAT_ORBIT_MIN))
+          s.speed = SAT_SPEED_MIN + Math.random() * (SAT_SPEED_MAX - SAT_SPEED_MIN)
+          s.entered = false
+          s.active = true
+        }
+        _v.set(Math.cos(s.theta) * s.radius, 0, Math.sin(s.theta) * s.radius).applyQuaternion(s.quat)
+        s.group.position.copy(_v)
+        s.group.lookAt(cam.position) // Silhouette zur Kamera gewandt -> gut erkennbar
+        const d = _v.normalize().dot(_camDir) // >0 = kameranahe (sichtbare) Halbkugel
+        const op = smoothstep(0.02, 0.2, d)
+        s.group.visible = op > 0.01
+        s.mats[0].opacity = op
+        s.mats[1].opacity = op
+        if (d > 0.25) s.entered = true
+        s.theta += s.dir * s.speed * dt
+        // Durchlauf beendet: sichtbar gewesen & jetzt auf der Rückseite – ODER Bogen-Sicherung
+        // (falls die Bahn fast frontal liegt und "entered" nie ausgelöst wird).
+        if ((s.entered && d < 0) || Math.abs(s.theta - s.startTheta) > Math.PI + 0.5) {
+          s.active = false
+          s.group.visible = false
+          s.nextAt = now + SAT_PAUSE_MIN_MS + Math.random() * (SAT_PAUSE_MAX_MS - SAT_PAUSE_MIN_MS)
+        }
+      }
+
       if (flash.visible) {
         const t = (now - flashStart) / LIGHTNING_DURATION_MS
         if (t >= 1) { flash.visible = false; glowMat.opacity = 0 }
