@@ -70,8 +70,19 @@ function clusterBadge(n: number): string {
 // DEKORATIVE EFFEKTE (rein optisch, nicht anklickbar, keine Funktion).
 // Bei Ruckeln auf Mobile in dieser Reihenfolge reduzieren: 1) SATELLITES kürzen (max 2),
 // 2) LIGHTNING_MIN/MAX erhöhen. Wolken zuletzt anfassen.
-const CLOUD_OPACITY = 0.42
-const CLOUD_DRIFT_SPEED = 0.006 // rad/s – langsamer, eigenständiger Drift über die Kontinente
+// Wolken: 6–10 Cluster aus je 3–5 überlappenden weißen Low-Poly-Kugeln (Cartoon-Puschel),
+// in wenigen Regionen geballt (große Lücken dazwischen), je eigener Drift um die Erdachse.
+const CLOUD_OPACITY = 0.9
+const CLOUD_ALTITUDE = 0.03        // Schwebehöhe über der Oberfläche (Anteil des Erdradius)
+const CLOUD_PUFF_SEGMENTS = 8      // sehr niedrig aufgelöste Kugeln (Performance)
+const CLOUD_REGIONS = [            // Ballungszentren; dazwischen bleibt es wolkenfrei
+  { lat: 28, lng: -55 },
+  { lat: -12, lng: 130 },
+  { lat: 48, lng: 25 },
+]
+const CLOUD_CLUSTERS_PER_REGION = 3   // -> ~9 Cluster
+const CLOUD_DRIFT_MIN = 0.03           // rad/s – bewusst nicht zu langsam
+const CLOUD_DRIFT_MAX = 0.055
 // Satelliten: eigene Umlaufbahn (Radius als Vielfaches des Globusradius), Neigung und
 // Geschwindigkeit je Satellit unterschiedlich, damit es nicht synchron wirkt.
 const SATELLITES = [
@@ -83,35 +94,6 @@ const LIGHTNING_MIN_MS = 5000
 const LIGHTNING_MAX_MS = 15000
 const LIGHTNING_DURATION_MS = 450
 // ============================================================================
-
-// Prozedurale Wolkentextur (weiche, halbtransparente Bänder) – leichtgewichtig, kein 5-MB-Asset.
-function makeCloudTexture(): THREE.Texture {
-  const w = 1024, h = 512
-  const cv = document.createElement('canvas')
-  cv.width = w; cv.height = h
-  const ctx = cv.getContext('2d')!
-  ctx.clearRect(0, 0, w, h)
-  const draw = (x: number, y: number, rx: number, ry: number, a: number) => {
-    const g = ctx.createRadialGradient(x, y, 0, x, y, rx)
-    g.addColorStop(0, `rgba(255,255,255,${a})`)
-    g.addColorStop(1, 'rgba(255,255,255,0)')
-    ctx.save(); ctx.translate(x, y); ctx.scale(1, ry / rx); ctx.translate(-x, -y)
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, rx, 0, Math.PI * 2); ctx.fill(); ctx.restore()
-  }
-  for (let i = 0; i < 240; i++) {
-    const x = Math.random() * w
-    const y = h * 0.5 + (Math.random() - 0.5) * h * 0.92 // weniger an den Polen
-    const rx = 30 + Math.random() * 90
-    const ry = rx * (0.35 + Math.random() * 0.3) // horizontal gestreckt -> Wolkenbänder
-    const a = 0.05 + Math.random() * 0.16
-    draw(x, y, rx, ry, a)
-    if (x < 120) draw(x + w, y, rx, ry, a)        // horizontal nahtlos umlaufend
-    else if (x > w - 120) draw(x - w, y, rx, ry, a)
-  }
-  const tex = new THREE.CanvasTexture(cv)
-  tex.wrapS = THREE.RepeatWrapping
-  return tex
-}
 
 // Weicher Leuchtpunkt (Blitz) via Canvas – additive Sprite-Textur.
 function makeGlowTexture(): THREE.Texture {
@@ -217,12 +199,38 @@ export function CampaignGlobePage() {
     const added: THREE.Object3D[] = []
     const disposables: Array<{ dispose: () => void }> = []
 
-    // --- Wolken-Schicht: leicht größere Kugel, eigene Rotation (Drift) ---
-    const cloudTex = makeCloudTexture()
-    const cloudGeo = new THREE.SphereGeometry(R * 1.015, 40, 30)
-    const cloudMat = new THREE.MeshPhongMaterial({ map: cloudTex, transparent: true, opacity: CLOUD_OPACITY, depthWrite: false })
-    const clouds = new THREE.Mesh(cloudGeo, cloudMat)
-    scene.add(clouds); added.push(clouds); disposables.push(cloudTex, cloudGeo, cloudMat)
+    // --- Wolken: Cluster aus Low-Poly-Kugeln, je auf eigenem Pivot um die Erdachse driftend ---
+    // Geometrie + Material werden von ALLEN Puffs geteilt (nur Transform pro Kugel) -> sehr leicht.
+    const puffGeo = new THREE.SphereGeometry(1, CLOUD_PUFF_SEGMENTS, CLOUD_PUFF_SEGMENTS - 2)
+    const puffMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: CLOUD_OPACITY, depthWrite: false })
+    disposables.push(puffGeo, puffMat)
+    const cloudPivots: Array<{ pivot: THREE.Object3D; speed: number }> = []
+    for (const region of CLOUD_REGIONS) {
+      for (let k = 0; k < CLOUD_CLUSTERS_PER_REGION; k++) {
+        const lat = region.lat + (Math.random() - 0.5) * 30
+        const lng = region.lng + (Math.random() - 0.5) * 40
+        const pivot = new THREE.Group() // im Ursprung -> Rotation.y dreht den Cluster um die Erdachse
+        const clump = new THREE.Group()
+        const pos = g.getCoords(lat, lng, CLOUD_ALTITUDE)
+        clump.position.set(pos.x, pos.y, pos.z)
+        clump.lookAt(0, 0, 0) // lokale Z-Achse zeigt radial -> Puffs liegen flach tangential zur Oberfläche
+        const base = R * (0.05 + Math.random() * 0.03)
+        const n = 3 + Math.floor(Math.random() * 3) // 3–5 Kugeln
+        for (let i = 0; i < n; i++) {
+          const puff = new THREE.Mesh(puffGeo, puffMat)
+          puff.scale.setScalar(base * (0.6 + Math.random() * 0.7))
+          puff.position.set(
+            (Math.random() - 0.5) * base * 2.4, // breit (tangential)
+            (Math.random() - 0.5) * base * 1.0, // mittel (tangential)
+            (Math.random() - 0.5) * base * 0.5, // flach (radial)
+          )
+          clump.add(puff)
+        }
+        pivot.add(clump)
+        scene.add(pivot); added.push(pivot)
+        cloudPivots.push({ pivot, speed: CLOUD_DRIFT_MIN + Math.random() * (CLOUD_DRIFT_MAX - CLOUD_DRIFT_MIN) })
+      }
+    }
 
     // --- Satelliten: je eigener geneigter Orbit + Tempo ---
     const orbits = SATELLITES.map(cfg => {
@@ -268,7 +276,7 @@ export function CampaignGlobePage() {
     const tick = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000)
       last = now
-      clouds.rotation.y += CLOUD_DRIFT_SPEED * dt
+      for (const c of cloudPivots) c.pivot.rotation.y += c.speed * dt
       for (const o of orbits) o.orbit.rotation.y += o.speed * dt
       if (flash.visible) {
         const t = (now - flashStart) / LIGHTNING_DURATION_MS
