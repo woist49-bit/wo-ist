@@ -27,7 +27,9 @@ export function ProfilePage() {
   const [totalPoints, setTotalPoints] = useState(0)
   const [wins, setWins] = useState(0)
   const [unlocked, setUnlocked] = useState<Set<string>>(new Set())
-  const [attempts, setAttempts] = useState({ total: 0, finds: 0 })
+  const [stats, setStats] = useState<{ total: number; finds: number; avgSeconds: number | null; campaigns: number; events: number }>(
+    { total: 0, finds: 0, avgSeconds: null, campaigns: 0, events: 0 },
+  )
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -37,21 +39,26 @@ export function ProfilePage() {
   const load = useCallback(async () => {
     if (!targetId) return
     const seq = ++loadSeq.current
-    const [profRes, lbRes, achRes, statRes] = await Promise.all([
+    const [profRes, totalsRes, achRes, statRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', targetId).single(),
-      supabase.rpc('global_leaderboard'),
+      supabase.rpc('user_totals', { p_user_id: targetId }),
       supabase.from('player_achievements').select('achievement_key').eq('user_id', targetId),
       supabase.rpc('user_play_stats', { p_user_id: targetId }),
     ])
     if (seq !== loadSeq.current) return // veraltet -> verwerfen
     setProfile(profRes.data)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const row = (lbRes.data ?? []).find((r: any) => r.user_id === targetId)
-    setTotalPoints(Number(row?.total_points ?? 0))
-    setWins(Number(row?.wins ?? 0))
+    const t = (totalsRes.data ?? [])[0]
+    setTotalPoints(Number(t?.total_points ?? 0))
+    setWins(Number(t?.wins ?? 0))
     setUnlocked(new Set((achRes.data ?? []).map(a => a.achievement_key)))
     const s = (statRes.data ?? [])[0]
-    setAttempts({ total: Number(s?.total ?? 0), finds: Number(s?.finds ?? 0) })
+    setStats({
+      total: Number(s?.total ?? 0),
+      finds: Number(s?.finds ?? 0),
+      avgSeconds: s?.avg_find_seconds != null ? Number(s.avg_find_seconds) : null,
+      campaigns: Number(s?.completed_campaigns ?? 0),
+      events: Number(s?.completed_events ?? 0),
+    })
   }, [targetId])
 
   useEffect(() => {
@@ -98,7 +105,7 @@ export function ProfilePage() {
 
   const { level, xpIntoLevel, xpNeeded } = levelFromXp(profile.global_xp)
   const progress = Math.min(100, Math.round((xpIntoLevel / xpNeeded) * 100))
-  const hitRate = attempts.total ? Math.round((attempts.finds / attempts.total) * 100) : 0
+  const hitRate = stats.total ? Math.round((stats.finds / stats.total) * 100) : 0
 
   return (
     <div className="fixed inset-0 z-50 bg-gradient-to-b from-slate-700 via-slate-800 to-slate-900 flex flex-col animate-slide-in-right">
@@ -198,9 +205,12 @@ export function ProfilePage() {
               <StatRow label="Achievements" value={`${unlocked.size} / ${ACHIEVEMENTS.length}`} />
               <StatRow label="Level" value={level} />
               <StatRow label="Gesamt-XP" value={profile.global_xp.toLocaleString()} />
-              <StatRow label="Gespielte Bilder" value={attempts.total} />
-              <StatRow label="Gefundene Bilder" value={attempts.finds} />
-              <StatRow label="Trefferquote" value={attempts.total ? `${hitRate}%` : '–'} />
+              <StatRow label="Gespielte Bilder" value={stats.total} />
+              <StatRow label="Gefundene Bilder" value={stats.finds} />
+              <StatRow label="Trefferquote" value={stats.total ? `${hitRate}%` : '–'} />
+              <StatRow label="Ø Suchzeit" value={formatSeconds(stats.avgSeconds)} />
+              <StatRow label="Abgeschlossene Kampagnen" value={stats.campaigns} />
+              <StatRow label="Abgeschlossene Live-Events" value={stats.events} />
             </div>
           )}
 
@@ -218,6 +228,16 @@ export function ProfilePage() {
       </div>
     </div>
   )
+}
+
+// Durchschnittliche Suchzeit lesbar: "42 s" bzw. "3:07 min" (null -> "–")
+function formatSeconds(s: number | null): string {
+  if (s == null) return '–'
+  const total = Math.round(s)
+  if (total < 60) return `${total} s`
+  const m = Math.floor(total / 60)
+  const rest = total % 60
+  return `${m}:${String(rest).padStart(2, '0')} min`
 }
 
 function StatRow({ label, value }: { label: string; value: string | number }) {

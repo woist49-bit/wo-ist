@@ -38,10 +38,7 @@ export function WorldHomePage() {
 
     // Danach Achievements global neu bewerten – fängt beim Event-Ende entstehende
     // Erfolge ab (first_win, no_miss, perfect_event) und zeigt Banner dafür.
-    if (user) {
-      const { data: newKeys } = await supabase.rpc('recheck_achievements', { p_user_id: user.id })
-      for (const key of ((newKeys ?? []) as string[])) triggerAchievement(key)
-    }
+    await recheckNow()
 
     const [worldRes, memberRes, eventsRes, campaignRes, imagesRes, ackRes] = await Promise.all([
       supabase.from('worlds').select('*').eq('id', worldId).single(),
@@ -100,6 +97,15 @@ export function WorldHomePage() {
     navigate('/worlds')
   }
 
+  // Achievements global neu bewerten und Banner für neu freigeschaltete Keys zeigen.
+  // Wird nach finish_due_events (Laden) und beim Öffnen des Event-Ergebnis-Dialogs
+  // aufgerufen, damit no_miss/perfect_event/first_win möglichst zeitnah erscheinen.
+  async function recheckNow() {
+    if (!user) return
+    const { data: newKeys } = await supabase.rpc('recheck_achievements', { p_user_id: user.id })
+    for (const key of ((newKeys ?? []) as string[])) triggerAchievement(key)
+  }
+
   async function ackFinishedEvent() {
     if (!finishedEvent || !user) return
     await supabase.from('event_result_ack').insert({ user_id: user.id, event_id: finishedEvent.id })
@@ -156,7 +162,7 @@ export function WorldHomePage() {
               </div>
             </button>
           ) : finishedEvent ? (
-            <button onClick={() => setResultDialog(true)} className="w-full text-left active:translate-y-[2px] transition-transform">
+            <button onClick={() => { setResultDialog(true); recheckNow() }} className="w-full text-left active:translate-y-[2px] transition-transform">
               <div className="rounded-[1.5rem] p-5 text-white bg-gradient-to-br from-violet-500 via-indigo-600 to-indigo-800 shadow-[0_6px_0_#312e81,inset_0_2px_0_#ffffff4d]">
                 <span className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide bg-white/25 rounded-full px-2.5 py-1 mb-2">
                   <Trophy size={13} strokeWidth={2.5} /> Event beendet
