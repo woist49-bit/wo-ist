@@ -12,7 +12,10 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt': neuer Service Worker aktiviert sich NICHT automatisch, sondern erst wenn
+      // der Nutzer im Update-Banner (PwaUpdatePrompt) auf „Neu laden" tippt. So wird eine
+      // laufende Spiel-Session nie mitten drin durch einen automatischen Reload unterbrochen.
+      registerType: 'prompt',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'Wo ist...?',

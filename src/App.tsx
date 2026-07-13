@@ -5,6 +5,7 @@ import { AppLayout, WorldLayout } from './components/layout/AppLayout'
 import { ToastProvider } from './stores/toast'
 import { NotificationProvider } from './stores/notifications'
 import { ToastContainer } from './components/ui/ToastContainer'
+import { PwaUpdatePrompt } from './components/PwaUpdatePrompt'
 import { ThemeColorManager } from './components/ThemeColorManager'
 import { AuthPage } from './pages/AuthPage'
 import { DatenschutzPage } from './pages/DatenschutzPage'
@@ -83,6 +84,7 @@ export function App() {
         </Route>
       </Routes>
       <ToastContainer />
+      <PwaUpdatePrompt />
     </BrowserRouter>
       </NotificationProvider>
     </ToastProvider>
