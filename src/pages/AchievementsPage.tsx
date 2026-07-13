@@ -18,7 +18,8 @@ export function AchievementsPage() {
 
   useEffect(() => {
     if (!user || !worldId) return
-    supabase.from('player_achievements').select('achievement_key').eq('user_id', user.id).eq('world_id', worldId)
+    // Achievements gelten global pro Spieler (nicht mehr pro Spielwelt) -> kein world_id-Filter
+    supabase.from('player_achievements').select('achievement_key').eq('user_id', user.id)
       .then(({ data }) => {
         setEarned(new Set((data as PlayerAchievement[] ?? []).map(a => a.achievement_key)))
         setLoading(false)
@@ -32,7 +33,7 @@ export function AchievementsPage() {
   return (
     <div className="p-4 max-w-lg mx-auto pt-5 pb-8">
       <h1 className="text-2xl font-extrabold text-white mb-1">Erfolge</h1>
-      <p className="text-white/50 text-sm mb-6">{earned.size} / {worldAchievements.length} freigeschaltet</p>
+      <p className="text-white/50 text-sm mb-6">{worldAchievements.filter(a => earned.has(a.key)).length} / {worldAchievements.length} freigeschaltet</p>
 
       {loading ? (
         <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" /></div>

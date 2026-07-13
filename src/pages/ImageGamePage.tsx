@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useNotifications } from '../stores/notifications'
 import { useToast } from '../stores/toast'
-import { calcPoints, isHit, distanceFraction, levelFromXp, effectiveElapsed, timeWarpRate } from '../lib/scoring'
+import { calcPoints, isHit, levelFromXp, effectiveElapsed, timeWarpRate } from '../lib/scoring'
 import { getShopItem } from '../lib/shop'
 import { Button } from '../components/ui/Button'
 import { GameCard } from '../components/ui/GameCard'
@@ -201,7 +201,6 @@ export function ImageGamePage() {
     const real = (Date.now() - startTimeRef.current) / 1000
     const seconds = Math.round(effectiveElapsed(real, timerStacks, hasZeitlupe)) // Timer-Debuff/Zeitlupe verzerren die Zeit
     const hit = isHit(tip.x, tip.y, image.target_x, image.target_y, image.target_radius, nat.w, nat.h)
-    const dist = distanceFraction(tip.x, tip.y, image.target_x, image.target_y)
     setSubmitting(true)
 
     if (isCampaign) {
@@ -217,13 +216,13 @@ export function ImageGamePage() {
         }, { onConflict: 'campaign_id,image_id,user_id' })
         setCampaignAttempted(true)
         if (hit) setCampaignFound(true)
-        if (hit) await awardAndNotify(awarded, seconds, dist, true)
+        await awardAndNotify(awarded, hit)
       } else if (hit && !campaignFound) {
         // Erster Versuch war daneben -> Fund zählt jetzt zum Abschluss, gibt aber 0 Punkte.
         await supabase.from('campaign_progress').update({ found: true })
           .eq('campaign_id', campaignId).eq('image_id', image.id).eq('user_id', user.id)
         setCampaignFound(true)
-        await awardAndNotify(0, seconds, dist, true) // keine Punkte/XP, aber Abschluss-Gems prüfen
+        await awardAndNotify(0, true) // keine Punkte/XP, aber Abschluss-Gems + Achievements prüfen
       }
       setLastHit(hit); setLastPoints(awarded); setRevealed(true); setSubmitting(false)
       return
@@ -238,9 +237,7 @@ export function ImageGamePage() {
     }).select().single()
     if (data) {
       setLiveAttempt(data)
-      if (hit) {
-        await awardAndNotify(points, seconds, dist, true)
-      }
+      await awardAndNotify(points, hit)
       // Item-/Debuff-Einsatz für die Rangliste protokollieren (Phase 7)
       await supabase.rpc('log_image_items', { p_image_id: image.id })
     }
@@ -271,25 +268,18 @@ export function ImageGamePage() {
     navigate(-1)
   }
 
-  // Vergibt XP + schaltet Achievements frei und löst die Benachrichtigungen aus
-  // (Banner pro neu freigeschaltetem Achievement, Level-Up-Overlay falls Level gestiegen).
-  async function awardAndNotify(pointsToAdd: number, seconds: number, dist: number, hit: boolean) {
+  // Vergibt Punkte-XP + Gems, wertet danach ALLE Achievements serverseitig global
+  // aus (recheck_achievements über die gesamte Spielhistorie) und löst die
+  // Benachrichtigungen aus (Banner pro neu freigeschaltetem Achievement,
+  // Level-Up-Overlay falls Level durch Punkte ODER Achievement-XP gestiegen ist).
+  // Wird bei Treffer UND Fehlversuch aufgerufen (z. B. für near_miss).
+  async function awardAndNotify(pointsToAdd: number, hit: boolean) {
     if (!user || !worldId) return
     const { data: before } = await supabase.from('profiles').select('global_xp').eq('id', user.id).single()
     const oldXp = before?.global_xp ?? 0
 
     if (pointsToAdd > 0) {
       await supabase.rpc('add_xp', { p_user_id: user.id, p_xp: pointsToAdd, p_world_id: worldId })
-    }
-
-    const toUnlock: string[] = []
-    if (hit) toUnlock.push('first_find')
-    if (hit && seconds < 5) toUnlock.push('eagle_eye')
-    if (hit && seconds > 300) toUnlock.push('patient_finder')
-    if (!hit && dist < 0.05) toUnlock.push('near_miss')
-    for (const key of toUnlock) {
-      const { data: isNew } = await supabase.rpc('unlock_achievement', { p_user_id: user.id, p_world_id: worldId, p_key: key })
-      if (isNew) triggerAchievement(key)
     }
 
     // Gems serverseitig + idempotent: Live-Fund (5) bzw. komplett abgeschlossene Kampagne (20)
@@ -300,6 +290,11 @@ export function ImageGamePage() {
         await supabase.rpc('award_find_gems', { p_user_id: user.id, p_image_id: image.id })
       }
     }
+
+    // Achievements global aus der gesamten Spielhistorie auswerten (ersetzt die
+    // frühere unvollständige Inline-Prüfung). Gibt neu freigeschaltete Keys zurück.
+    const { data: newKeys } = await supabase.rpc('recheck_achievements', { p_user_id: user.id })
+    for (const key of ((newKeys ?? []) as string[])) triggerAchievement(key)
 
     const { data: after } = await supabase.from('profiles').select('global_xp').eq('id', user.id).single()
     const newXp = after?.global_xp ?? oldXp

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Clock, Trophy, Globe } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
+import { useNotifications } from '../stores/notifications'
 import { useServerNow } from '../hooks/useServerNow'
 import { formatCountdown } from '../lib/time'
 import { Button } from '../components/ui/Button'
@@ -14,6 +15,7 @@ interface Progress { total: number; done: number }
 export function WorldHomePage() {
   const { worldId } = useParams<{ worldId: string }>()
   const { user } = useAuth()
+  const { triggerAchievement } = useNotifications()
   const navigate = useNavigate()
   const [world, setWorld] = useState<World | null>(null)
   const [membership, setMembership] = useState<WorldMember | null>(null)
@@ -33,6 +35,13 @@ export function WorldHomePage() {
   async function load() {
     // Überfällige Events automatisch beenden + archivieren, bevor der Rest geladen wird
     await supabase.rpc('finish_due_events', { p_world_id: worldId })
+
+    // Danach Achievements global neu bewerten – fängt beim Event-Ende entstehende
+    // Erfolge ab (first_win, no_miss, perfect_event) und zeigt Banner dafür.
+    if (user) {
+      const { data: newKeys } = await supabase.rpc('recheck_achievements', { p_user_id: user.id })
+      for (const key of ((newKeys ?? []) as string[])) triggerAchievement(key)
+    }
 
     const [worldRes, memberRes, eventsRes, campaignRes, imagesRes, ackRes] = await Promise.all([
       supabase.from('worlds').select('*').eq('id', worldId).single(),

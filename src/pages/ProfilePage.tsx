@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ChangeEvent } from 'react'
+import { useState, useEffect, useRef, useCallback, type ChangeEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, Camera } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -31,28 +31,45 @@ export function ProfilePage() {
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
+  // Sequenz-Guard: nur das Ergebnis des jeweils jüngsten load() wird übernommen
+  // (schützt vor Races bei targetId-Wechsel, Unmount und Fokus-Refetch).
+  const loadSeq = useRef(0)
+  const load = useCallback(async () => {
     if (!targetId) return
-    let active = true
-    ;(async () => {
-      const [profRes, lbRes, achRes, statRes] = await Promise.all([
-        supabase.from('profiles').select('*').eq('id', targetId).single(),
-        supabase.rpc('global_leaderboard'),
-        supabase.from('player_achievements').select('achievement_key').eq('user_id', targetId),
-        supabase.rpc('user_play_stats', { p_user_id: targetId }),
-      ])
-      if (!active) return
-      setProfile(profRes.data)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const row = (lbRes.data ?? []).find((r: any) => r.user_id === targetId)
-      setTotalPoints(Number(row?.total_points ?? 0))
-      setWins(Number(row?.wins ?? 0))
-      setUnlocked(new Set((achRes.data ?? []).map(a => a.achievement_key)))
-      const s = (statRes.data ?? [])[0]
-      setAttempts({ total: Number(s?.total ?? 0), finds: Number(s?.finds ?? 0) })
-    })()
-    return () => { active = false }
+    const seq = ++loadSeq.current
+    const [profRes, lbRes, achRes, statRes] = await Promise.all([
+      supabase.from('profiles').select('*').eq('id', targetId).single(),
+      supabase.rpc('global_leaderboard'),
+      supabase.from('player_achievements').select('achievement_key').eq('user_id', targetId),
+      supabase.rpc('user_play_stats', { p_user_id: targetId }),
+    ])
+    if (seq !== loadSeq.current) return // veraltet -> verwerfen
+    setProfile(profRes.data)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const row = (lbRes.data ?? []).find((r: any) => r.user_id === targetId)
+    setTotalPoints(Number(row?.total_points ?? 0))
+    setWins(Number(row?.wins ?? 0))
+    setUnlocked(new Set((achRes.data ?? []).map(a => a.achievement_key)))
+    const s = (statRes.data ?? [])[0]
+    setAttempts({ total: Number(s?.total ?? 0), finds: Number(s?.finds ?? 0) })
   }, [targetId])
+
+  useEffect(() => {
+    load()
+    return () => { loadSeq.current++ } // laufende load()-Aufrufe invalidieren
+  }, [load])
+
+  // Bei Rückkehr in die App / auf den Tab frisch nachladen, damit gerade
+  // freigeschaltete Erfolge und aktualisierte Statistiken sofort erscheinen.
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') load() }
+    window.addEventListener('focus', onVisible)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener('focus', onVisible)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [load])
 
   async function onAvatarChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]

@@ -154,10 +154,11 @@ create table campaign_progress (
 create table player_achievements (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references profiles(id) on delete cascade,
-  world_id uuid references worlds(id) on delete cascade,
+  world_id uuid references worlds(id) on delete cascade,   -- nur noch Kontext/Anzeige, NICHT Teil der Eindeutigkeit
   achievement_key text not null,
   earned_at timestamptz not null default now(),
-  unique (user_id, world_id, achievement_key)
+  -- Achievements gelten GLOBAL pro Spieler: einmal über alle Spielwelten hinweg.
+  constraint player_achievements_user_key_uniq unique (user_id, achievement_key)
 );
 
 -- =============================================
@@ -276,11 +277,9 @@ create policy "Admins can manage campaigns" on campaigns for all
 create policy "Users manage own campaign progress" on campaign_progress for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
--- player_achievements
-create policy "Users can view own achievements" on player_achievements for select
-  using (auth.uid() = user_id);
-create policy "Members can view achievements in world" on player_achievements for select
-  using (exists (select 1 from world_members where world_id = player_achievements.world_id and user_id = auth.uid()));
+-- player_achievements (global pro Spieler) – wie Profile öffentlich lesbar,
+-- damit Erfolge auch auf fremden Profilen und spielwelt-übergreifend sichtbar sind.
+create policy "Achievements are viewable" on player_achievements for select using (true);
 create policy "System can insert achievements" on player_achievements for insert
   with check (auth.uid() = user_id);
 
@@ -328,7 +327,7 @@ declare
 begin
   insert into player_achievements (user_id, world_id, achievement_key)
   values (p_user_id, p_world_id, p_key)
-  on conflict (user_id, world_id, achievement_key) do nothing;
+  on conflict (user_id, achievement_key) do nothing;   -- GLOBAL: world_id spielt keine Rolle
 
   if found then
     xp := (xp_rewards ->> p_key)::integer;
@@ -339,6 +338,156 @@ begin
     return true;
   end if;
   return false;
+end;
+$$;
+
+-- Wertet ALLE Achievements global (über alle Spielwelten) aus den vorhandenen
+-- Daten des Spielers aus, vergibt fehlende idempotent und gibt die NEU
+-- freigeschalteten Keys zurück (fürs Banner). Client ruft das nach jedem
+-- Spielzug und nach finish_due_events auf; dient zugleich als Backfill.
+-- Semantik: near_miss = Live-Fehltipp < 0.05; patient_finder = Live-Fund > 300 s;
+-- no_miss = beendetes Event komplett korrekt; perfect_event = zusätzlich >= 10 Bilder;
+-- first_win = Rang 1 nach Punkten in beendetem Event (>0); last_minute = korrekter
+-- Live-Fund in den letzten 60 min vor Bild-Ablauf (unlocks_at + 24h).
+create or replace function recheck_achievements(p_user_id uuid)
+returns text[] language plpgsql security definer as $$
+declare
+  newly text[] := '{}';
+begin
+  -- Eingeloggte Clients dürfen nur sich selbst prüfen; Service-Role (auth.uid() NULL) darf alle (Backfill).
+  if auth.uid() is not null and auth.uid() <> p_user_id then
+    raise exception 'not allowed';
+  end if;
+
+  -- first_find – irgendein korrekter Fund (Live oder Kampagne)
+  -- Hinweis: cp.found MUSS qualifiziert sein – "found" ist sonst die PL/pgSQL-Systemvariable.
+  if exists (select 1 from player_attempts where user_id = p_user_id and is_correct)
+     or exists (select 1 from campaign_progress cp where cp.user_id = p_user_id and cp.found) then
+    if unlock_achievement(p_user_id, null, 'first_find') then newly := array_append(newly, 'first_find'); end if;
+  end if;
+
+  -- first_event – an mindestens einem Live-Event teilgenommen
+  if exists (select 1 from player_attempts where user_id = p_user_id) then
+    if unlock_achievement(p_user_id, null, 'first_event') then newly := array_append(newly, 'first_event'); end if;
+  end if;
+
+  -- legacy_first – ein Bild einer Legacy-Kampagne abgeschlossen
+  if exists (
+    select 1 from campaign_progress cp join campaigns c on c.id = cp.campaign_id
+    where cp.user_id = p_user_id and cp.found and c.is_legacy
+  ) then
+    if unlock_achievement(p_user_id, null, 'legacy_first') then newly := array_append(newly, 'legacy_first'); end if;
+  end if;
+
+  -- near_miss – Live-Fehltipp mit Distanz < 0.05
+  if exists (
+    select 1 from player_attempts pa join event_images ei on ei.id = pa.image_id
+    where pa.user_id = p_user_id and not pa.is_correct
+      and sqrt(power(pa.click_x - ei.target_x, 2) + power(pa.click_y - ei.target_y, 2)) < 0.05
+  ) then
+    if unlock_achievement(p_user_id, null, 'near_miss') then newly := array_append(newly, 'near_miss'); end if;
+  end if;
+
+  -- tutorial_master – Tutorial abgeschlossen (kein XP über unlock_achievement -> reiner Nachtrag)
+  if exists (select 1 from profiles where id = p_user_id and tutorial_completed) then
+    if unlock_achievement(p_user_id, null, 'tutorial_master') then newly := array_append(newly, 'tutorial_master'); end if;
+  end if;
+
+  -- eagle_eye – Live-Fund in < 5 s
+  if exists (select 1 from player_attempts where user_id = p_user_id and is_correct and time_seconds < 5) then
+    if unlock_achievement(p_user_id, null, 'eagle_eye') then newly := array_append(newly, 'eagle_eye'); end if;
+  end if;
+
+  -- patient_finder – Live-Fund > 300 s
+  if exists (select 1 from player_attempts where user_id = p_user_id and is_correct and time_seconds > 300) then
+    if unlock_achievement(p_user_id, null, 'patient_finder') then newly := array_append(newly, 'patient_finder'); end if;
+  end if;
+
+  -- streak_5 – 5 aufeinanderfolgende korrekte Live-Funde (nach Zeit sortiert)
+  if exists (
+    with a as (
+      select is_correct,
+             row_number() over (order by attempted_at, id)
+               - row_number() over (partition by is_correct order by attempted_at, id) as grp
+      from player_attempts where user_id = p_user_id
+    )
+    select 1 from a where is_correct group by grp having count(*) >= 5
+  ) then
+    if unlock_achievement(p_user_id, null, 'streak_5') then newly := array_append(newly, 'streak_5'); end if;
+  end if;
+
+  -- no_miss – beendetes Event, in dem JEDES Bild korrekt gefunden wurde
+  if exists (
+    select 1 from live_events le
+    where le.status = 'finished'
+      and exists (select 1 from event_images ei where ei.event_id = le.id)
+      and not exists (
+        select 1 from event_images ei where ei.event_id = le.id
+          and not exists (select 1 from player_attempts pa
+                          where pa.image_id = ei.id and pa.user_id = p_user_id and pa.is_correct)
+      )
+  ) then
+    if unlock_achievement(p_user_id, null, 'no_miss') then newly := array_append(newly, 'no_miss'); end if;
+  end if;
+
+  -- first_win – Rang 1 nach Punkten in einem beendeten Event (Punkte > 0)
+  if exists (
+    with event_pts as (
+      select ei.event_id, pa.user_id, sum(pa.points) as pts
+      from player_attempts pa
+      join event_images ei on ei.id = pa.image_id
+      join live_events le on le.id = ei.event_id and le.status = 'finished'
+      group by ei.event_id, pa.user_id
+    ),
+    ranked as (
+      select event_id, user_id, rank() over (partition by event_id order by pts desc) as rnk
+      from event_pts where pts > 0
+    )
+    select 1 from ranked where user_id = p_user_id and rnk = 1
+  ) then
+    if unlock_achievement(p_user_id, null, 'first_win') then newly := array_append(newly, 'first_win'); end if;
+  end if;
+
+  -- perfect_event – beendetes Event mit >= 10 Bildern, alle korrekt
+  if exists (
+    select 1 from live_events le
+    where le.status = 'finished'
+      and (select count(*) from event_images ei where ei.event_id = le.id) >= 10
+      and not exists (
+        select 1 from event_images ei where ei.event_id = le.id
+          and not exists (select 1 from player_attempts pa
+                          where pa.image_id = ei.id and pa.user_id = p_user_id and pa.is_correct)
+      )
+  ) then
+    if unlock_achievement(p_user_id, null, 'perfect_event') then newly := array_append(newly, 'perfect_event'); end if;
+  end if;
+
+  -- campaign_king – alle Bilder einer Kampagne gefunden (eigene Legacy-Bilder ODER Bilder des Original-Events)
+  if exists (
+    select 1 from campaigns c
+    where (select count(*) from event_images ei
+           where ei.campaign_id = c.id
+              or (c.original_event_id is not null and ei.event_id = c.original_event_id)) > 0
+      and (select count(*) from event_images ei
+           where ei.campaign_id = c.id
+              or (c.original_event_id is not null and ei.event_id = c.original_event_id))
+        = (select count(distinct cp.image_id) from campaign_progress cp
+           where cp.campaign_id = c.id and cp.user_id = p_user_id and cp.found)
+  ) then
+    if unlock_achievement(p_user_id, null, 'campaign_king') then newly := array_append(newly, 'campaign_king'); end if;
+  end if;
+
+  -- last_minute – korrekter Live-Fund in den letzten 60 min vor Bild-Ablauf (unlocks_at + 24h)
+  if exists (
+    select 1 from player_attempts pa join event_images ei on ei.id = pa.image_id
+    where pa.user_id = p_user_id and pa.is_correct
+      and pa.attempted_at >= ei.unlocks_at + interval '23 hours'
+      and pa.attempted_at <  ei.unlocks_at + interval '24 hours'
+  ) then
+    if unlock_achievement(p_user_id, null, 'last_minute') then newly := array_append(newly, 'last_minute'); end if;
+  end if;
+
+  return newly;
 end;
 $$;
 
@@ -363,9 +512,10 @@ language sql security definer as $$
     ) z group by user_id
   ),
   achievements as (
+    -- Achievements gelten global pro Spieler -> nicht mehr nach world_id filtern.
+    -- (Die Ranglisten-Reihenfolge nutzt weiterhin nur Punkte; nur die Anzeige-Zahl.)
     select user_id, count(*)::bigint as cnt
     from player_achievements
-    where world_id = p_world_id
     group by user_id
   ),
   event_pts as (
