@@ -31,7 +31,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,wasm}'],
         // Der (lazy geladene) Globus-Chunk mit three.js ist groß – Precache-Limit anheben,
         // sonst bricht der Build ab. Wird nur bei Bedarf nachgeladen (Code-Splitting).
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
@@ -40,6 +40,17 @@ export default defineConfig({
             urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
             handler: 'NetworkFirst',
             options: { cacheName: 'supabase-cache', expiration: { maxEntries: 50, maxAgeSeconds: 300 } },
+          },
+          {
+            // Das 3D-Globus-Modell (~7 MB) wird NICHT vorab gecacht (überschreitet das
+            // Precache-Limit), aber nach dem ersten Laden dauerhaft gecacht -> danach offline.
+            urlPattern: /\.glb$/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'model-cache',
+              expiration: { maxEntries: 4, maxAgeSeconds: 60 * 60 * 24 * 90 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
           },
         ],
       },

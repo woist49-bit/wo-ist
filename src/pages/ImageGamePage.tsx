@@ -31,6 +31,7 @@ export function ImageGamePage() {
   const [liveAttempt, setLiveAttempt] = useState<PlayerAttempt | null>(null) // Live-Versuch = Teilnahme/Ergebnis
   const [campaignFound, setCampaignFound] = useState(false)
   const [campaignAttempted, setCampaignAttempted] = useState(false) // schon mal (auch daneben) auf diesem Kampagnen-Bild versucht?
+  const [campaignImageIds, setCampaignImageIds] = useState<string[]>([]) // geordnete Bildliste der Kampagne (für „Weiter")
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [revealed, setRevealed] = useState(false)
@@ -64,6 +65,15 @@ export function ImageGamePage() {
   useEffect(() => { if (imageId && user) load() }, [imageId, user])
 
   async function load() {
+    // Rundenzustand zurücksetzen – die Komponente bleibt bei „Weiter" (neues Bild derselben
+    // Kampagne) gemountet, deshalb hier explizit alles auf Anfang setzen.
+    setLoading(true)
+    setRevealed(false); setTip(null); setLastHit(null); setLastPoints(0)
+    setBegun(false); setImgLoaded(false); setImgError(false); setElapsed(0)
+    setMagHalf(null); setSabotageAck(false); setSubmitting(false)
+    setCampaignFound(false); setCampaignAttempted(false)
+    startTimeRef.current = Date.now()
+
     const [imgRes, attRes, roleRes] = await Promise.all([
       supabase.from('event_images').select('*').eq('id', imageId).single(),
       supabase.from('player_attempts').select('*').eq('image_id', imageId).eq('user_id', user!.id).maybeSingle(),
@@ -95,6 +105,13 @@ export function ImageGamePage() {
       setCampaignFound(prog?.found ?? false)
       setCampaignAttempted(!!prog) // Zeile existiert = schon mal versucht -> keine Punkte mehr
       // Kampagne startet immer spielbar (auch bereits gefundene Bilder -> wiederholbar)
+      // Geordnete Bildliste laden -> „Weiter" führt zum nächsten Bild der Reihenfolge.
+      const { data: camp } = await supabase.from('campaigns').select('original_event_id').eq('id', campaignId).single()
+      const listQ = camp?.original_event_id
+        ? supabase.from('event_images').select('id').eq('event_id', camp.original_event_id)
+        : supabase.from('event_images').select('id').eq('campaign_id', campaignId)
+      const { data: list } = await listQ.order('sort_order')
+      setCampaignImageIds((list ?? []).map(i => i.id))
     } else if (attRes.data) {
       // Live-Event: vorhandener Versuch -> Ergebnis zeigen
       setTip({ x: attRes.data.click_x, y: attRes.data.click_y })
@@ -123,6 +140,14 @@ export function ImageGamePage() {
   }
 
   const placing = !revealed
+
+  // Nächstes Bild der Kampagne (in Reihenfolge). Nach Abschluss des aktuellen ist es freigeschaltet.
+  // null = aktuelles Bild ist das letzte -> Kampagne komplett -> „Fertig".
+  const nextImageId = useMemo(() => {
+    if (!isCampaign || !imageId) return null
+    const idx = campaignImageIds.indexOf(imageId)
+    return idx >= 0 && idx + 1 < campaignImageIds.length ? campaignImageIds[idx + 1] : null
+  }, [isCampaign, imageId, campaignImageIds])
 
   const timerStacks = useMemo(() => debuffs.filter(d => d.debuff_type === 'timer_debuff').reduce((s, d) => s + d.stacks, 0), [debuffs])
   const blurStacks = useMemo(() => debuffs.filter(d => d.debuff_type === 'blur_debuff').reduce((s, d) => s + d.stacks, 0), [debuffs])
@@ -333,7 +358,7 @@ export function ImageGamePage() {
         style={{ filter: blurred ? 'blur(16px)' : 'none', transition: 'filter 0.12s linear' }}
       >
         <ImageMarkerViewer
-          key={reloadKey}
+          key={`${imageId}-${reloadKey}`}
           imageUrl={image.image_url}
           markers={markers}
           height="100%"
@@ -438,10 +463,22 @@ export function ImageGamePage() {
             )}
           </div>
           <div className="flex gap-3">
-            {isCampaign && (
-              <Button variant="secondary" className="flex-1" onClick={playAgain}>🔁 Nochmal</Button>
+            {isCampaign ? (
+              <>
+                {/* Links: immer zurück ins Kampagnen-Menü */}
+                <Button variant="secondary" className="flex-1" onClick={() => navigate(`/world/${worldId}/campaign/${campaignId}`)}>Zurück</Button>
+                {/* Rechts: je nach Ergebnis */}
+                {!lastHit ? (
+                  <Button className="flex-1" onClick={playAgain}>Nochmal</Button>
+                ) : nextImageId ? (
+                  <Button className="flex-1" onClick={() => navigate(`/world/${worldId}/campaign/${campaignId}/image/${nextImageId}`, { replace: true })}>Weiter</Button>
+                ) : (
+                  <Button variant="success" className="flex-1" onClick={() => navigate(`/world/${worldId}/campaign/${campaignId}`)}>Fertig</Button>
+                )}
+              </>
+            ) : (
+              <Button className="flex-1" onClick={() => navigate(-1)}>Zurück</Button>
             )}
-            <Button className="flex-1" onClick={() => navigate(-1)}>Zurück</Button>
           </div>
         </div>
       )}

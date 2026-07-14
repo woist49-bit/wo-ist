@@ -1,90 +1,97 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Globe, { type GlobeMethods } from 'react-globe.gl'
 import * as THREE from 'three'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import { X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { Button } from '../components/ui/Button'
 import type { Campaign } from '../types'
 
-const EARTH_TEX = '/textures/earth-day.jpg'
+// ============================================================================
+// LOW-POLY-3D-MODELL (ersetzt die Textur-Kugel). Lokal geladen (offline), Materialien
+// auf Metallic-Roughness konvertiert + Meshopt-komprimiert (siehe public/models/).
+const EARTH_MODEL = '/models/low-poly_earth.glb'
+// Rotations-Offset, um das Modell auf die react-globe.gl-Koordinaten auszurichten.
+// Per Referenzpunkt-Test verifiziert (Deutschland/NY/Sydney passen exakt): Y −90°.
+const MODEL_ROTATION_DEG = { x: 0, y: -90, z: 0 }
+// ============================================================================
 
 interface Pin { campaign: Campaign; lat: number; lng: number; total: number; done: number }
-interface Cluster { lat: number; lng: number; items: Pin[] }
 
 // ============================================================================
-// CLUSTER-RADIUS – hier justieren, wie früh nahe Pins zusammengefasst werden.
-// Der Cluster-Radius (in Grad) skaliert mit der Zoom-Höhe:
-//     radius = Zoomhöhe * CLUSTER_RADIUS_DEG_PER_ALTITUDE   (begrenzt auf [MIN, MAX])
-// Zwei Pins verschmelzen erst, wenn ihr Abstand kleiner als dieser Radius ist.
-// KLEINER = Pins bleiben länger einzeln sichtbar (weniger Clustering).
-// (Bewusst deutlich kleiner gesetzt als zuvor – vorher lag der Wert bei Start-Zoom ~40°.)
-const CLUSTER_RADIUS_DEG_PER_ALTITUDE = 3.5
-const CLUSTER_MIN_DEG = 0.4   // näher zusammen als das = immer clustern (echte Überlappung)
-const CLUSTER_MAX_DEG = 16    // Deckel beim ganz weiten Herauszoomen
+// KAMPAGNEN-PINS – klassische Stecknadel: kugeliger, farbiger Kopf + dünner,
+// grau-metallischer Stachel, der zur exakten Koordinate auf der Oberfläche zeigt.
+// Kopf-Farbe NUTZERSPEZIFISCH nach Fortschritt (rot = nicht begonnen, orange = begonnen,
+// grün = abgeschlossen). Gilt genauso für archivierte Live-Events (in der DB ebenfalls
+// Kampagnen). Fortschritt (done/total) = dieselbe Quelle wie die Dot-Anzeige im Menü.
+const R_GLOBE = 100                      // three-globe-Radius (konstant) – Basis der Pin-Maße
+const PIN_HEAD_RADIUS = R_GLOBE * 0.024
+const PIN_SPIKE_LEN = R_GLOBE * 0.075    // Stachel-Länge (Oberfläche -> Kopf)
+const PIN_SPIKE_TIP_DIG = R_GLOBE * 0.02 // Spitze etwas unter der Oberfläche (steckt sichtbar „drin")
+const PIN_SPIKE_RADIUS = R_GLOBE * 0.008
+const PIN_UP = new THREE.Vector3(0, 1, 0)
+
+type PinStatus = 'red' | 'orange' | 'green'
+
+// Geteilte Geometrien + Materialien (ein Satz für alle Nadeln) -> sehr leicht.
+const pinHeadGeo = new THREE.SphereGeometry(PIN_HEAD_RADIUS, 16, 12)
+const pinSpikeGeo = new THREE.ConeGeometry(PIN_SPIKE_RADIUS, PIN_SPIKE_LEN + PIN_SPIKE_TIP_DIG, 10)
+const pinSpikeMat = new THREE.MeshStandardMaterial({ color: 0x9aa3af, roughness: 0.3, metalness: 0.9 }) // grau, metallisch
+const pinHeadMats: Record<PinStatus, THREE.MeshStandardMaterial> = {
+  red:    new THREE.MeshStandardMaterial({ color: 0xe11d48, roughness: 0.35, metalness: 0.1 }),
+  orange: new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.35, metalness: 0.1 }),
+  green:  new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.35, metalness: 0.1 }),
+}
+
+function pinStatus(p: Pin): PinStatus {
+  if (p.total > 0 && p.done >= p.total) return 'green' // alle Bilder gefunden
+  if (p.done > 0) return 'orange'                       // begonnen, nicht abgeschlossen
+  return 'red'                                          // noch kein Bild gefunden
+}
+
+// Baut eine Stecknadel. Lokal: +Y = radial nach außen; der Gruppen-Ursprung sitzt auf der
+// Oberfläche (Positionierung/Ausrichtung erfolgt in positionPin über getCoords).
+function buildPushpin(p: Pin): THREE.Group {
+  const g = new THREE.Group()
+  const spike = new THREE.Mesh(pinSpikeGeo, pinSpikeMat)
+  spike.rotation.x = Math.PI                                 // Spitze nach unten (in die Oberfläche)
+  spike.position.y = (PIN_SPIKE_LEN - PIN_SPIKE_TIP_DIG) / 2 // Spitze bei y≈-dig, Basis bei y=SPIKE_LEN
+  const head = new THREE.Mesh(pinHeadGeo, pinHeadMats[pinStatus(p)])
+  head.position.y = PIN_SPIKE_LEN + PIN_HEAD_RADIUS * 0.85   // Kopf sitzt oben auf dem Stachel
+  g.add(spike, head)
+  return g
+}
 // ============================================================================
 
-// Konkreter Radius bei aktueller Zoom-Höhe, auf 0.5°-Stufen quantisiert -> Cluster werden
-// nur an wenigen Zoom-Schwellen neu berechnet (kein Flackern bei jeder Zoom-Bewegung).
-function radiusFromAltitude(alt: number): number {
-  const clamped = Math.min(CLUSTER_MAX_DEG, Math.max(CLUSTER_MIN_DEG, alt * CLUSTER_RADIUS_DEG_PER_ALTITUDE))
-  return Math.round(clamped * 2) / 2
-}
-
-// Echtes radiusbasiertes Clustering (greedy): ein Pin kommt zu einem Cluster, wenn er näher
-// als radiusDeg an dessen Schwerpunkt liegt. Längengrad-Abstand mit cos(Breite) gewichtet,
-// da Längengrade Richtung Pol schrumpfen. n ist klein (wenige Kampagnen) -> O(n²) unkritisch.
-function clusterPins(pins: Pin[], radiusDeg: number): Cluster[] {
-  const clusters: Cluster[] = []
-  for (const p of pins) {
-    let target: Cluster | null = null
-    for (const c of clusters) {
-      const dLat = c.lat - p.lat
-      let dLng = c.lng - p.lng
-      if (dLng > 180) dLng -= 360
-      else if (dLng < -180) dLng += 360
-      dLng *= Math.cos((p.lat * Math.PI) / 180)
-      if (Math.hypot(dLat, dLng) <= radiusDeg) { target = c; break }
-    }
-    if (target) {
-      target.items.push(p)
-      target.lat = target.items.reduce((s, q) => s + q.lat, 0) / target.items.length
-      target.lng = target.items.reduce((s, q) => s + q.lng, 0) / target.items.length
-    } else {
-      clusters.push({ lat: p.lat, lng: p.lng, items: [p] })
-    }
-  }
-  return clusters
-}
-
-// Statische (nicht animierte) Marker-DOM-Knoten – begrenzt gleichzeitige Animationen bewusst.
-function pinSvg(): string {
-  return `<svg width="26" height="26" viewBox="0 0 24 24" fill="#f43f5e" stroke="#ffffff" stroke-width="1.5" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))"><path d="M12 21s-6-5.6-6-10a6 6 0 1 1 12 0c0 4.4-6 10-6 10z"/><circle cx="12" cy="11" r="2.3" fill="#ffffff" stroke="none"/></svg>`
-}
-function clusterBadge(n: number): string {
-  return `<div style="width:28px;height:28px;border-radius:9999px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.55)">${n}</div>`
-}
-
 // ============================================================================
-// DEKORATIVE EFFEKTE (rein optisch, nicht anklickbar, keine Funktion).
-// Bei Ruckeln auf Mobile: LIGHTNING_MIN/MAX_MS erhöhen bzw. CLOUD_CLUSTERS_PER_REGION senken.
-// Wolken: 6–10 Cluster aus je 3–5 überlappenden weißen Low-Poly-Kugeln (Cartoon-Puschel),
-// in wenigen Regionen geballt (große Lücken dazwischen), je eigener Drift um die Erdachse.
+// DEKORATIVE EFFEKTE (rein optisch, nicht anklickbar). Wolken: Cluster aus Low-Poly-Kugeln,
+// je auf eigenem Pivot um die Erdachse driftend. Gelegentliche Blitze.
 const CLOUD_OPACITY = 0.9
-const CLOUD_ALTITUDE = 0.03        // Schwebehöhe über der Oberfläche (Anteil des Erdradius)
-const CLOUD_PUFF_SEGMENTS = 8      // sehr niedrig aufgelöste Kugeln (Performance)
-const CLOUD_REGIONS = [            // Ballungszentren; dazwischen bleibt es wolkenfrei
+const CLOUD_ALTITUDE = 0.03
+const CLOUD_PUFF_SEGMENTS = 8
+const CLOUD_REGIONS = [
   { lat: 28, lng: -55 },
   { lat: -12, lng: 130 },
   { lat: 48, lng: 25 },
 ]
-const CLOUD_CLUSTERS_PER_REGION = 10   // -> ~30 Cluster (deutlich vollere Wolkenregionen)
-const CLOUD_DRIFT_MIN = 0.03           // rad/s – bewusst nicht zu langsam
+const CLOUD_CLUSTERS_PER_REGION = 10
+const CLOUD_DRIFT_MIN = 0.03
 const CLOUD_DRIFT_MAX = 0.055
 const LIGHTNING_MIN_MS = 5000
 const LIGHTNING_MAX_MS = 15000
 const LIGHTNING_DURATION_MS = 450
+// ============================================================================
+
+// ============================================================================
+// EINFLUG-ANIMATION beim ersten Öffnen (kamerabasiert -> Modell, Wolken, Pins fliegen
+// gemeinsam herein; three-globes eigenes animateIn ist abgeschaltet).
+const FLY_IN_MS = 1700
+const FLY_IN_START_ALTITUDE = 5.0
+const FLY_IN_END_ALTITUDE = 2.4
+const FLY_IN_FROM = { lat: 20, lng: 0 }
 // ============================================================================
 
 // Weicher Leuchtpunkt (Blitz) via Canvas – additive Sprite-Textur.
@@ -108,13 +115,13 @@ export function CampaignGlobePage() {
 
   const wrapRef = useRef<HTMLDivElement>(null)
   const globeRef = useRef<GlobeMethods | undefined>(undefined)
-  const altitudeRef = useRef(2.4)
+  const flewInRef = useRef(false)    // Einflug nur einmal ausführen
+  const flyingInRef = useRef(false)  // während des Einflugs Pin-Klicks ignorieren
 
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [pins, setPins] = useState<Pin[]>([])
   const [loading, setLoading] = useState(true)
   const [ready, setReady] = useState(false)
-  const [clusterRadius, setClusterRadius] = useState(() => radiusFromAltitude(2.4))
   const [selected, setSelected] = useState<Pin | null>(null)
 
   // Container ausmessen (Globus braucht feste Pixelmaße), auf Resize aktualisieren.
@@ -127,7 +134,7 @@ export function CampaignGlobePage() {
     return () => ro.disconnect()
   }, [])
 
-  // Kampagnen mit Standort + Fortschritt laden (gleiche Logik wie Startseite).
+  // Kampagnen mit Standort + nutzerspezifischem Fortschritt laden (gleiche Quelle wie Startseite).
   useEffect(() => {
     if (!worldId || !user) return
     let active = true
@@ -161,28 +168,117 @@ export function CampaignGlobePage() {
     return () => { active = false }
   }, [worldId, user])
 
-  // Steuerung konfigurieren: kein Auto-Rotate, sanftes Damping, Pixel-Ratio gedeckelt (Mobile-Perf).
+  // Steuerung konfigurieren + EIN durchgängiger Einflug (Library-Tween, mit Controls koordiniert).
   useEffect(() => {
-    const g = globeRef.current
+    const g = globeRef.current as any
     if (!g || !ready) return
-    const c = g.controls() as any
+    const c = g.controls()
     c.autoRotate = false
     c.enablePan = false
-    c.enableDamping = true
     c.dampingFactor = 0.12
     c.rotateSpeed = 0.6
     c.zoomSpeed = 0.8
     try { g.renderer().setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5)) } catch {}
-    // Startansicht auf den Schwerpunkt der Pins (oder neutral), leicht herausgezoomt.
-    const start = pins.length
-      ? { lat: pins.reduce((s, p) => s + p.lat, 0) / pins.length, lng: pins.reduce((s, p) => s + p.lng, 0) / pins.length, altitude: 2.4 }
-      : { lat: 25, lng: 0, altitude: 2.4 }
-    g.pointOfView(start, 0)
-  }, [ready, pins])
 
-  // Dekorative Effekte (Wolken-Drift, gelegentliche Blitze) als reine three.js-Objekte in der
-  // Szene – nicht anklickbar, eine gemeinsame rAF-Schleife. Läuft einmal bei „ready" und räumt
-  // bei Unmount alles restlos auf (Geometrien/Materialien/Texturen).
+    // Z-Fighting-Fix: react-globe.gl setzt near=0.05 / far=125000 (Verhältnis 2,5 Mio) -> der
+    // Tiefenpuffer verliert massiv an Präzision (Facetten-Kanten flackern). Auf den real genutzten
+    // Distanzbereich eingrenzen (Verhältnis ~2000). far wird nur bei skyRadius-Änderung gesetzt (nie).
+    try {
+      const R0 = g.getGlobeRadius() || 100
+      c.minDistance = R0 * 1.05
+      c.maxDistance = R0 * 12
+      const cam = g.camera()
+      cam.near = 1
+      cam.far = R0 * 20
+      cam.updateProjectionMatrix()
+    } catch { /* Kamera/Controls noch nicht bereit */ }
+
+    if (flewInRef.current) { c.enableRotate = true; c.enableZoom = true; return }
+    if (loading) return // Ziel (Pin-Schwerpunkt) steht noch nicht fest -> Kamera bleibt am Fernpunkt
+
+    flewInRef.current = true
+    flyingInRef.current = true
+    // WICHTIG: Controls AKTIV lassen, nur die EINGABE sperren. Mit c.enabled=false blockiert
+    // react-globe.gl den Kamera-Tween (Globus friert am Fernpunkt ein – per Test verifiziert).
+    c.enableRotate = false
+    c.enableZoom = false
+
+    const target = pins.length
+      ? { lat: pins.reduce((s, p) => s + p.lat, 0) / pins.length, lng: pins.reduce((s, p) => s + p.lng, 0) / pins.length }
+      : { lat: 25, lng: 0 }
+    // Sanfter Einflug über react-globe.gls eigenen Tween (Quadratic.Out = Ease-Out). Fernpunkt
+    // wurde in onGlobeReady gesetzt -> kein Default-Frame-Sprung.
+    g.pointOfView({ lat: target.lat, lng: target.lng, altitude: FLY_IN_END_ALTITUDE }, FLY_IN_MS)
+    const done = window.setTimeout(() => {
+      flyingInRef.current = false
+      c.enableRotate = true // ab jetzt voll interaktiv (Drag/Zoom)
+      c.enableZoom = true
+    }, FLY_IN_MS)
+    return () => window.clearTimeout(done)
+  }, [ready, loading, pins])
+
+  // 3D-Erdmodell laden und die Standard-Textur-Kugel ersetzen. Läuft einmal bei „ready",
+  // räumt bei Unmount Geometrien/Materialien/Texturen restlos auf.
+  useEffect(() => {
+    const g = globeRef.current as any
+    if (!g || !ready) return
+    const scene: THREE.Scene = g.scene()
+    const R: number = g.getGlobeRadius() || 100
+
+    const loader = new GLTFLoader()
+    const draco = new DRACOLoader()
+    draco.setDecoderPath('/draco/') // lokal gehostet -> offline-tauglich, kein CDN
+    loader.setDRACOLoader(draco)
+    let holder: THREE.Group | null = null
+    let disposed = false
+
+    loader.load(
+      EARTH_MODEL,
+      (gltf) => {
+        if (disposed) return
+        holder = new THREE.Group()
+        holder.add(gltf.scene)
+        // Zentrieren + auf Globus-Radius skalieren. Echter Kugelradius = größte Halb-Ausdehnung der
+        // AABB (NICHT box.getBoundingSphere() – das liefert die AABB-Bounding-Sphere ≈ Radius·√3 und
+        // skaliert das Modell viel zu klein). Mit maxHalfExtent passt der Modellradius exakt zu R.
+        const box = new THREE.Box3().setFromObject(holder)
+        const center = box.getCenter(new THREE.Vector3())
+        const size = box.getSize(new THREE.Vector3())
+        const radius = Math.max(size.x, size.y, size.z) / 2 || R
+        gltf.scene.position.sub(center)
+        holder.scale.setScalar(R / radius)
+        holder.rotation.set(
+          THREE.MathUtils.degToRad(MODEL_ROTATION_DEG.x),
+          THREE.MathUtils.degToRad(MODEL_ROTATION_DEG.y),
+          THREE.MathUtils.degToRad(MODEL_ROTATION_DEG.z),
+        )
+        scene.add(holder)
+      },
+      undefined,
+      (err) => console.error('Globus-Modell konnte nicht geladen werden:', err),
+    )
+
+    return () => {
+      disposed = true
+      draco.dispose()
+      if (!holder) return
+      scene.remove(holder)
+      holder.traverse((o) => {
+        const mesh = o as THREE.Mesh
+        if (mesh.geometry) mesh.geometry.dispose()
+        const mm = mesh.material as THREE.Material | THREE.Material[] | undefined
+        for (const mat of (Array.isArray(mm) ? mm : mm ? [mm] : [])) {
+          for (const key of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'specularMap'] as const) {
+            const tex = (mat as unknown as Record<string, THREE.Texture | undefined>)[key]
+            if (tex?.dispose) tex.dispose()
+          }
+          mat.dispose()
+        }
+      })
+    }
+  }, [ready])
+
+  // Dekorative Effekte (Wolken-Drift, gelegentliche Blitze) – eine gemeinsame rAF-Schleife.
   useEffect(() => {
     const g = globeRef.current as any
     if (!g || !ready) return
@@ -191,8 +287,6 @@ export function CampaignGlobePage() {
     const added: THREE.Object3D[] = []
     const disposables: Array<{ dispose: () => void }> = []
 
-    // --- Wolken: Cluster aus Low-Poly-Kugeln, je auf eigenem Pivot um die Erdachse driftend ---
-    // Geometrie + Material werden von ALLEN Puffs geteilt (nur Transform pro Kugel) -> sehr leicht.
     const puffGeo = new THREE.SphereGeometry(1, CLOUD_PUFF_SEGMENTS, CLOUD_PUFF_SEGMENTS - 2)
     const puffMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: CLOUD_OPACITY, depthWrite: false })
     disposables.push(puffGeo, puffMat)
@@ -201,20 +295,20 @@ export function CampaignGlobePage() {
       for (let k = 0; k < CLOUD_CLUSTERS_PER_REGION; k++) {
         const lat = region.lat + (Math.random() - 0.5) * 42
         const lng = region.lng + (Math.random() - 0.5) * 60
-        const pivot = new THREE.Group() // im Ursprung -> Rotation.y dreht den Cluster um die Erdachse
+        const pivot = new THREE.Group()
         const clump = new THREE.Group()
         const pos = g.getCoords(lat, lng, CLOUD_ALTITUDE)
         clump.position.set(pos.x, pos.y, pos.z)
-        clump.lookAt(0, 0, 0) // lokale Z-Achse zeigt radial -> Puffs liegen flach tangential zur Oberfläche
+        clump.lookAt(0, 0, 0)
         const base = R * (0.05 + Math.random() * 0.03)
-        const n = 3 + Math.floor(Math.random() * 3) // 3–5 Kugeln
+        const n = 3 + Math.floor(Math.random() * 3)
         for (let i = 0; i < n; i++) {
           const puff = new THREE.Mesh(puffGeo, puffMat)
           puff.scale.setScalar(base * (0.6 + Math.random() * 0.7))
           puff.position.set(
-            (Math.random() - 0.5) * base * 2.4, // breit (tangential)
-            (Math.random() - 0.5) * base * 1.0, // mittel (tangential)
-            (Math.random() - 0.5) * base * 0.5, // flach (radial)
+            (Math.random() - 0.5) * base * 2.4,
+            (Math.random() - 0.5) * base * 1.0,
+            (Math.random() - 0.5) * base * 0.5,
           )
           clump.add(puff)
         }
@@ -224,7 +318,6 @@ export function CampaignGlobePage() {
       }
     }
 
-    // --- Blitze: ein additives Sprite, wird zufällig positioniert und kurz aufgeblendet ---
     const glowTex = makeGlowTexture()
     const glowMat = new THREE.SpriteMaterial({ map: glowTex, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending })
     const flash = new THREE.Sprite(glowMat)
@@ -247,14 +340,12 @@ export function CampaignGlobePage() {
     }
     scheduleFlash()
 
-    // --- Eine gemeinsame Animationsschleife für alle drei Effekte ---
     let raf = 0
     let last = performance.now()
     const tick = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000)
       last = now
       for (const c of cloudPivots) c.pivot.rotation.y += c.speed * dt
-
       if (flash.visible) {
         const t = (now - flashStart) / LIGHTNING_DURATION_MS
         if (t >= 1) { flash.visible = false; glowMat.opacity = 0 }
@@ -272,29 +363,16 @@ export function CampaignGlobePage() {
     }
   }, [ready])
 
-  const clusters = useMemo(() => clusterPins(pins, clusterRadius), [pins, clusterRadius])
-
-  const handleZoom = useCallback((pov: { altitude: number }) => {
-    altitudeRef.current = pov.altitude
-    const next = radiusFromAltitude(pov.altitude)
-    setClusterRadius(prev => (prev === next ? prev : next))
-  }, [])
-
-  const buildElement = useCallback((d: object) => {
-    const c = d as Cluster
-    const el = document.createElement('div')
-    el.style.pointerEvents = 'auto'
-    el.style.cursor = 'pointer'
-    if (c.items.length === 1) {
-      el.innerHTML = pinSvg()
-      el.onclick = () => setSelected(c.items[0])
-    } else {
-      el.innerHTML = clusterBadge(c.items.length)
-      el.onclick = () => globeRef.current?.pointOfView(
-        { lat: c.lat, lng: c.lng, altitude: Math.max(0.4, altitudeRef.current * 0.45) }, 700,
-      )
-    }
-    return el
+  // Custom-Layer: 3D-Stecknadel pro Kampagne (einzige Pin-Darstellung).
+  const buildPin = useCallback((d: object) => buildPushpin(d as Pin), [])
+  const positionPin = useCallback((obj: object, d: object) => {
+    const g = globeRef.current as any
+    if (!g) return
+    const p = d as Pin
+    const c = g.getCoords(p.lat, p.lng, 0) // Oberflächenpunkt (Alt 0) im Globus-Koordinatensystem
+    const o = obj as THREE.Object3D
+    o.position.set(c.x, c.y, c.z)
+    o.quaternion.setFromUnitVectors(PIN_UP, new THREE.Vector3(c.x, c.y, c.z).normalize()) // +Y radial nach außen
   }, [])
 
   return (
@@ -305,13 +383,26 @@ export function CampaignGlobePage() {
           width={size.w}
           height={size.h}
           backgroundColor="rgba(0,0,0,0)"
-          globeImageUrl={EARTH_TEX}
+          showGlobe={false}   // KEINE Standard-Textur-Kugel – das GLB-Modell ersetzt sie vollständig
           atmosphereColor="#7dd3fc"
           atmosphereAltitude={0.14}
-          onGlobeReady={() => setReady(true)}
-          onZoom={handleZoom}
-          htmlElementsData={clusters}
-          htmlElement={buildElement}
+          animateIn={false}
+          onGlobeReady={() => {
+            // Sofort weit weg + Eingabe sperren (NUR Rotate/Zoom, NICHT controls.enabled!),
+            // BEVOR react-globe.gl einen Default-Frame zeigt -> Einflug startet ohne Sprung.
+            const g = globeRef.current as unknown as GlobeMethods & {
+              controls: () => { enableRotate: boolean; enableZoom: boolean }
+            }
+            if (g) {
+              try { const ctrl = g.controls(); ctrl.enableRotate = false; ctrl.enableZoom = false } catch { /* noch nicht bereit */ }
+              g.pointOfView({ lat: FLY_IN_FROM.lat, lng: FLY_IN_FROM.lng, altitude: FLY_IN_START_ALTITUDE }, 0)
+            }
+            setReady(true)
+          }}
+          customLayerData={pins}
+          customThreeObject={buildPin}
+          customThreeObjectUpdate={positionPin}
+          onCustomLayerClick={(d: object) => { if (!flyingInRef.current) setSelected(d as Pin) }}
         />
       )}
 

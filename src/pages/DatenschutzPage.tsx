@@ -3,6 +3,18 @@ import { ChevronLeft } from 'lucide-react'
 import { IconButton } from '../components/ui/IconButton'
 import { GameCard } from '../components/ui/GameCard'
 
+// Lizenzierte Drittanbieter-Assets (3D-Modelle, Icons, Schriften …). Neue Einträge
+// einfach hier ergänzen – sie erscheinen automatisch im Abschnitt „Credits".
+const CREDITS: { title: string; url: string; author: string; license: string; licenseUrl: string }[] = [
+  {
+    title: 'Low-Poly Earth',
+    url: 'https://skfb.ly/6utKF',
+    author: 'Alan Zimmerman',
+    license: 'Creative Commons Attribution 4.0',
+    licenseUrl: 'http://creativecommons.org/licenses/by/4.0/',
+  },
+]
+
 export function DatenschutzPage() {
   const navigate = useNavigate()
 
@@ -84,6 +96,19 @@ export function DatenschutzPage() {
               Bei Fragen zum Datenschutz erreichst du uns unter <b>[wo.ist.paul49@gmail.com]</b>.
             </Section>
 
+            <div className="mb-4">
+              <h2 className="font-extrabold text-slate-800 mb-1">11. Verwendete Drittanbieter-Inhalte</h2>
+              <p>Für die Gestaltung dieser App werden folgende lizenzierten Inhalte Dritter genutzt:</p>
+              <ul className="mt-2 space-y-2 list-disc pl-5">
+                {CREDITS.map((c, i) => (
+                  <li key={i} className="leading-relaxed">
+                    „<CreditLink href={c.url}>{c.title}</CreditLink>" by {c.author} is licensed under{' '}
+                    <CreditLink href={c.licenseUrl}>{c.license}</CreditLink>.
+                  </li>
+                ))}
+              </ul>
+            </div>
+
             <p className="text-xs text-slate-400 mt-4">Stand: [27.06.2026]</p>
           </GameCard>
         </div>
@@ -98,5 +123,13 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h2 className="font-extrabold text-slate-800 mb-1">{title}</h2>
       <p>{children}</p>
     </div>
+  )
+}
+
+function CreditLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="text-sky-600 underline break-words">
+      {children}
+    </a>
   )
 }
