@@ -37,6 +37,7 @@ export function ImageGamePage() {
   const [revealed, setRevealed] = useState(false)
   const [lastHit, setLastHit] = useState<boolean | null>(null)
   const [lastPoints, setLastPoints] = useState(0)
+  const [gemLimited, setGemLimited] = useState(false) // Tages-Limit für Gems war bei diesem Fund erreicht
   const [elapsed, setElapsed] = useState(0)
   const [showAbort, setShowAbort] = useState(false)
 
@@ -68,7 +69,7 @@ export function ImageGamePage() {
     // Rundenzustand zurücksetzen – die Komponente bleibt bei „Weiter" (neues Bild derselben
     // Kampagne) gemountet, deshalb hier explizit alles auf Anfang setzen.
     setLoading(true)
-    setRevealed(false); setTip(null); setLastHit(null); setLastPoints(0)
+    setRevealed(false); setTip(null); setLastHit(null); setLastPoints(0); setGemLimited(false)
     setBegun(false); setImgLoaded(false); setImgError(false); setElapsed(0)
     setMagHalf(null); setSabotageAck(false); setSubmitting(false)
     setCampaignFound(false); setCampaignAttempted(false)
@@ -270,7 +271,7 @@ export function ImageGamePage() {
   }
 
   function playAgain() {
-    setRevealed(false); setTip(null); setLastHit(null); setLastPoints(0)
+    setRevealed(false); setTip(null); setLastHit(null); setLastPoints(0); setGemLimited(false)
     setElapsed(0)
     startTimeRef.current = Date.now() // Bild ist schon geladen -> direkt weiter, begun bleibt true
   }
@@ -303,17 +304,19 @@ export function ImageGamePage() {
     const { data: before } = await supabase.from('profiles').select('global_xp').eq('id', user.id).single()
     const oldXp = before?.global_xp ?? 0
 
-    if (pointsToAdd > 0) {
+    if (!isCampaign && hit && image) {
+      // Live-Fund: Gems (5) UND XP laufen gemeinsam über eine validierende RPC, die das
+      // Tages-Limit (5 Gem-Funde pro Berliner Kalendertag, spielwelt-übergreifend)
+      // serverseitig durchsetzt. Ist es erreicht, gibt es weder Gems noch XP – der Fund
+      // selbst (player_attempts + Punkte + Achievements) zählt trotzdem regulär.
+      const { data: reward } = await supabase.rpc('award_live_find_rewards', {
+        p_user_id: user.id, p_image_id: image.id, p_xp: pointsToAdd,
+      })
+      setGemLimited(!!(reward as { limited?: boolean } | null)?.limited)
+    } else if (pointsToAdd > 0) {
+      // Kampagne: XP wie bisher an die Punkte gekoppelt – aber keine Gems (Gems gibt es
+      // ausschließlich für Live-Event-Funde).
       await supabase.rpc('add_xp', { p_user_id: user.id, p_xp: pointsToAdd, p_world_id: worldId })
-    }
-
-    // Gems serverseitig + idempotent: Live-Fund (5) bzw. komplett abgeschlossene Kampagne (20)
-    if (image) {
-      if (isCampaign && campaignId) {
-        await supabase.rpc('award_campaign_gems', { p_user_id: user.id, p_campaign_id: campaignId })
-      } else if (hit) {
-        await supabase.rpc('award_find_gems', { p_user_id: user.id, p_image_id: image.id })
-      }
     }
 
     // Achievements global aus der gesamten Spielhistorie auswerten (ersetzt die
@@ -460,6 +463,9 @@ export function ImageGamePage() {
             )}
             {isCampaign && lastHit && lastPoints === 0 && (
               <p className="text-xs text-white/40 mt-1">Bereits gespielt – keine zusätzlichen Punkte</p>
+            )}
+            {gemLimited && (
+              <p className="text-xs text-amber-300 mt-1">Tages-Limit für Gems erreicht – dein Fund zählt trotzdem für die Rangliste!</p>
             )}
           </div>
           <div className="flex gap-3">

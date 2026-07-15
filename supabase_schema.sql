@@ -23,26 +23,42 @@ create table profiles (
 -- Profilbild: öffentliche URL im bestehenden Bucket "game-images" (Ordner avatars/<uid>/)
 alter table profiles add column if not exists avatar_url text;
 
--- Normalisierter Benutzername (getrimmt, einfache Leerzeichen, kleingeschrieben) für Eindeutigkeit/Login
+-- Normalisierter Benutzername (getrimmt, einfache Leerzeichen, kleingeschrieben) für Eindeutigkeit.
+-- UNIQUE, nicht nur Index: sonst können zwei gleichzeitige Signups denselben Namen belegen.
 alter table profiles add column if not exists username_key text;
 update profiles set username_key = lower(regexp_replace(trim(username), '\s+', ' ', 'g')) where username_key is null;
-create index if not exists profiles_username_key_idx on profiles (username_key);
+create unique index if not exists profiles_username_key_uniq on profiles (username_key);
 
--- Echte E-Mail privat (nur zur Wiederherstellung) – getrennt von öffentlich lesbaren Profilen
-create table if not exists account_recovery (
-  user_id uuid primary key references profiles(id) on delete cascade,
-  email text not null,
-  created_at timestamptz not null default now()
-);
-alter table account_recovery enable row level security;
-create policy "Owner manages own recovery email" on account_recovery for all
-  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+-- Die echte E-Mail IST die Auth-Identität (auth.users.email) – es gibt bewusst keine
+-- zweite Kopie in einer eigenen Tabelle. Nur so funktioniert Supabase' eingebaute
+-- E-Mail-Bestätigung; angemeldet wird sich mit der Adresse, der Benutzername ist reiner
+-- Anzeigename.
 
--- Prüft E-Mail-Eindeutigkeit, ohne fremde E-Mails offenzulegen
-create or replace function email_taken(p_email text) returns boolean
-language sql security definer as $$
-  select exists(select 1 from account_recovery where lower(email) = lower(trim(p_email)));
+-- Profil beim Anlegen eines Auth-Users erzeugen. Muss ein Trigger sein: bei aktiver
+-- E-Mail-Bestätigung hat der Client beim Signup noch keine Session, ein Insert würde an
+-- RLS scheitern. Zugleich atomar – scheitert das Profil (z. B. Benutzername vergeben),
+-- entsteht auch kein Auth-User.
+create or replace function handle_new_user()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_display text := nullif(trim(coalesce(new.raw_user_meta_data ->> 'username', '')), '');
+  v_key text;
+begin
+  if v_display is null then
+    raise exception 'USERNAME_MISSING: signUp muss options.data.username mitgeben';
+  end if;
+  v_display := regexp_replace(v_display, '\s+', ' ', 'g');
+  v_key := lower(v_display);
+  insert into profiles (id, username, username_key, global_xp, global_level, global_wins)
+  values (new.id, v_display, v_key, 0, 1, 0);
+  return new;
+end;
 $$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function handle_new_user();
 
 create table worlds (
   id uuid primary key default gen_random_uuid(),
@@ -151,13 +167,15 @@ create table campaign_progress (
   unique (campaign_id, image_id, user_id)
 );
 
+-- Achievements gelten GLOBAL pro Spieler: einmal über alle Spielwelten hinweg.
+-- Bewusst OHNE world_id: der Welt-Bezug stammte aus der Zeit, als Erfolge pro Welt
+-- gesammelt wurden. Er wäre nicht nur unnötig, sondern gefährlich – über
+-- "on delete cascade" hätte das Löschen einer Spielwelt globale Erfolge mitgerissen.
 create table player_achievements (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references profiles(id) on delete cascade,
-  world_id uuid references worlds(id) on delete cascade,   -- nur noch Kontext/Anzeige, NICHT Teil der Eindeutigkeit
   achievement_key text not null,
   earned_at timestamptz not null default now(),
-  -- Achievements gelten GLOBAL pro Spieler: einmal über alle Spielwelten hinweg.
   constraint player_achievements_user_key_uniq unique (user_id, achievement_key)
 );
 
@@ -190,6 +208,10 @@ create policy "Members can view their worlds" on worlds for select
 create policy "Authenticated users can create worlds" on worlds for insert
   with check (auth.uid() = created_by);
 create policy "Admins can update their world" on worlds for update
+  using (exists (select 1 from world_members where world_id = worlds.id and user_id = auth.uid() and role = 'admin'));
+-- Löschen räumt per Cascade alles ab, was an der Welt hängt (Mitgliedschaften, Events,
+-- Bilder, Versuche, Kampagnen, Fortschritte). Erfolge/Gems/XP hängen am Profil und bleiben.
+create policy "Admins can delete their world" on worlds for delete
   using (exists (select 1 from world_members where world_id = worlds.id and user_id = auth.uid() and role = 'admin'));
 
 -- world_members
@@ -233,6 +255,30 @@ create policy "Members can view events" on live_events for select
   using (exists (select 1 from world_members where world_id = live_events.world_id and user_id = auth.uid()));
 create policy "Admins can manage events" on live_events for all
   using (exists (select 1 from world_members where world_id = live_events.world_id and user_id = auth.uid() and role = 'admin'));
+
+-- Anti-Exploit: Live-Events erst ab 5 Mitgliedern (Admin mitgezählt). Verhindert, dass sich
+-- jemand mit einer Fake-Spielwelt beliebig Events (= Gem-Quelle) selbst anlegt.
+-- Als Trigger (nicht nur im Frontend/RPC), damit auch ein direkter PostgREST-Insert greift.
+-- security definer: world_members hat RLS – die Zählung muss ALLE Mitglieder sehen.
+create or replace function enforce_event_min_members()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_members integer;
+begin
+  select count(*) into v_members from world_members where world_id = new.world_id;
+  if v_members < 5 then
+    raise exception 'Für Live-Events werden mindestens 5 Mitglieder in der Spielwelt benötigt (aktuell: %/5).', v_members
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end;
+$$;
+
+-- Auch bei nachträglichem Umhängen auf eine andere (kleine) Spielwelt prüfen.
+drop trigger if exists trg_event_min_members on live_events;
+create trigger trg_event_min_members
+  before insert or update of world_id on live_events
+  for each row execute function enforce_event_min_members();
 
 -- event_images
 create policy "Members can view images" on event_images for select
@@ -308,7 +354,10 @@ begin
 end;
 $$;
 
--- Gibt true zurück, wenn das Achievement NEU freigeschaltet wurde (für das Banner)
+-- Gibt true zurück, wenn das Achievement NEU freigeschaltet wurde (für das Banner).
+-- p_world_id ist ein Altlast-Parameter aus der Zeit der welt-bezogenen Erfolge: er wird
+-- nicht mehr gespeichert und nur an add_xp durchgereicht, das ihn ebenfalls ignoriert.
+-- Der einzige Aufrufer (recheck_achievements) übergibt durchgehend null.
 create or replace function unlock_achievement(p_user_id uuid, p_world_id uuid, p_key text)
 returns boolean language plpgsql security definer as $$
 declare
@@ -325,9 +374,9 @@ declare
   }'::jsonb;
   xp integer;
 begin
-  insert into player_achievements (user_id, world_id, achievement_key)
-  values (p_user_id, p_world_id, p_key)
-  on conflict (user_id, achievement_key) do nothing;   -- GLOBAL: world_id spielt keine Rolle
+  insert into player_achievements (user_id, achievement_key)
+  values (p_user_id, p_key)
+  on conflict (user_id, achievement_key) do nothing;   -- GLOBAL: einmal pro Spieler
 
   if found then
     xp := (xp_rewards ->> p_key)::integer;
@@ -340,6 +389,11 @@ begin
   return false;
 end;
 $$;
+
+-- Vergibt Gems + XP -> darf NICHT direkt vom Frontend aufrufbar sein (sonst könnte sich
+-- jeder alle Achievements samt Gems selbst freischalten). Nur recheck_achievements ruft
+-- sie auf; das läuft als security definer und damit als Owner.
+revoke execute on function unlock_achievement(uuid, uuid, text) from public, anon, authenticated;
 
 -- Wertet ALLE Achievements global (über alle Spielwelten) aus den vorhandenen
 -- Daten des Spielers aus, vergibt fehlende idempotent und gibt die NEU
@@ -879,45 +933,69 @@ begin
 end;
 $$;
 
--- 5 Gems für einen korrekten Live-Event-Treffer (nur wenn wirklich getroffen; einmal pro Bild)
-create or replace function award_find_gems(p_user_id uuid, p_image_id uuid)
-returns integer language plpgsql security definer as $$
+-- Gems gibt es AUSSCHLIESSLICH für korrekte Live-Event-Funde (5 pro Bild) – Kampagnen-
+-- Aktivität gibt keine Gems (weder pro Bild noch als Abschluss-Bonus), damit sie sich nicht
+-- mit selbst angelegten Kampagnen in Fake-Spielwelten beliebig farmen lassen.
+-- Zusätzlich gedeckelt auf 5 Gem-/XP-gebende Funde pro Berliner Kalendertag,
+-- spielwelt-übergreifend. Ein weiterer Fund zählt regulär (player_attempts, Punkte,
+-- Achievements), bekommt aber weder Gems noch XP.
+-- Rückgabe: { gems, xp, limited } – limited = true -> Tages-Limit war erreicht.
+create or replace function award_live_find_rewards(p_user_id uuid, p_image_id uuid, p_xp integer)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_world_id uuid;
+  v_today integer;
+  v_gems integer;
+  v_xp integer;
 begin
+  -- Eingeloggte Clients dürfen nur sich selbst belohnen.
+  if auth.uid() is not null and auth.uid() <> p_user_id then
+    raise exception 'not allowed';
+  end if;
+
+  -- Muss ein LIVE-Event-Bild sein (event_id gesetzt) – Kampagnen-Bilder geben keine Gems.
+  select ei.world_id into v_world_id
+  from event_images ei
+  where ei.id = p_image_id and ei.event_id is not null;
+  if v_world_id is null then
+    return jsonb_build_object('gems', 0, 'xp', 0, 'limited', false);
+  end if;
+
+  -- Muss ein echter, serverseitig gespeicherter korrekter Fund sein.
   if not exists (
     select 1 from player_attempts
     where user_id = p_user_id and image_id = p_image_id and is_correct
   ) then
-    return 0;
+    return jsonb_build_object('gems', 0, 'xp', 0, 'limited', false);
   end if;
-  return award_gems(p_user_id, 5, 'find', p_image_id::text);
-end;
-$$;
 
--- 20 Gems wenn eine Kampagne KOMPLETT abgeschlossen ist (einmal pro Kampagne, nicht beim Wiederholen)
-create or replace function award_campaign_gems(p_user_id uuid, p_campaign_id uuid)
-returns integer language plpgsql security definer as $$
-declare
-  v_event uuid;
-  v_total integer;
-  v_done integer;
-begin
-  select original_event_id into v_event from campaigns where id = p_campaign_id;
-  with imgs as (
-    select ei.id from event_images ei
-    where (v_event is not null and ei.event_id = v_event)
-       or (v_event is null and ei.campaign_id = p_campaign_id)
-  ),
-  done as (
-    select i.id from imgs i
-    where exists (select 1 from campaign_progress cp
-                  where cp.campaign_id = p_campaign_id and cp.image_id = i.id
-                    and cp.user_id = p_user_id and cp.found)
-       or exists (select 1 from player_attempts pa
-                  where pa.image_id = i.id and pa.user_id = p_user_id and pa.is_correct)
-  )
-  select (select count(*) from imgs), (select count(*) from done) into v_total, v_done;
-  if v_total = 0 or v_done < v_total then return 0; end if;
-  return award_gems(p_user_id, 20, 'campaign', p_campaign_id::text);
+  -- Für dieses Bild schon belohnt? -> nichts tun (idempotent bei Doppelaufruf).
+  if exists (
+    select 1 from gem_transactions
+    where user_id = p_user_id and reason = 'find' and ref_key = p_image_id::text
+  ) then
+    return jsonb_build_object('gems', 0, 'xp', 0, 'limited', false);
+  end if;
+
+  -- Zähl-Quelle ist das Ledger (reason = 'find'): es enthält exakt die Funde, die heute
+  -- schon Gems gegeben haben – ein abgelehnter Fund erzeugt keinen Eintrag und
+  -- verschiebt das Limit daher nicht. Berliner Kalendertag, konsistent zur Freischalt-Logik.
+  select count(*) into v_today
+  from gem_transactions
+  where user_id = p_user_id and reason = 'find'
+    and (created_at at time zone 'Europe/Berlin')::date = (now() at time zone 'Europe/Berlin')::date;
+
+  if v_today >= 5 then
+    return jsonb_build_object('gems', 0, 'xp', 0, 'limited', true);
+  end if;
+
+  v_gems := award_gems(p_user_id, 5, 'find', p_image_id::text);
+  -- Deckel: max. mögliche Punktzahl ist 300 (calcPoints) bzw. 600 mit Doppelte-Punkte-Buff.
+  v_xp := least(greatest(coalesce(p_xp, 0), 0), 600);
+  if v_xp > 0 then
+    perform add_xp(p_user_id, v_xp, v_world_id);
+  end if;
+  return jsonb_build_object('gems', v_gems, 'xp', v_xp, 'limited', false);
 end;
 $$;
 

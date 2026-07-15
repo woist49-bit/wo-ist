@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { signIn, signUp } from '../stores/auth'
+import { signIn, signUp, resendConfirmation } from '../stores/auth'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { GameCard } from '../components/ui/GameCard'
@@ -14,6 +14,11 @@ export function AuthPage() {
   const [accepted, setAccepted] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  // Nach der Registrierung: Supabase hat noch keine Session vergeben, der Nutzer muss
+  // erst den Link aus der Mail klicken. Bis dahin dieser Screen statt /worlds.
+  const [awaitingConfirm, setAwaitingConfirm] = useState(false)
+  const [resendMsg, setResendMsg] = useState('')
+  const [resending, setResending] = useState(false)
   const navigate = useNavigate()
 
   function switchMode(m: 'login' | 'register') {
@@ -21,7 +26,7 @@ export function AuthPage() {
   }
 
   const canSubmit = mode === 'login'
-    ? !!username.trim() && !!password
+    ? !!email.trim() && !!password
     : !!username.trim() && !!email.trim() && !!password && !!confirm && accepted
 
   async function handleSubmit(e: FormEvent) {
@@ -29,9 +34,9 @@ export function AuthPage() {
     setError('')
 
     if (mode === 'login') {
-      if (!username.trim() || !password) { setError('Bitte fülle alle Felder aus.'); return }
+      if (!email.trim() || !password) { setError('Bitte fülle alle Felder aus.'); return }
       setLoading(true)
-      const { error } = await signIn(username, password)
+      const { error } = await signIn(email, password)
       setLoading(false)
       if (error) { setError(error); return }
       navigate('/worlds')
@@ -44,10 +49,52 @@ export function AuthPage() {
     if (!accepted) { setError('Bitte akzeptiere die Datenschutzerklärung.'); return }
 
     setLoading(true)
-    const { error } = await signUp(username, email, password)
+    const { error, needsConfirmation } = await signUp(username, email, password)
     setLoading(false)
     if (error) { setError(error); return }
+    if (needsConfirmation) { setAwaitingConfirm(true); return }
     navigate('/worlds')
+  }
+
+  async function handleResend() {
+    setResending(true); setResendMsg('')
+    const { error } = await resendConfirmation(email)
+    setResending(false)
+    setResendMsg(error ?? 'Bestätigungs-E-Mail wurde erneut verschickt.')
+  }
+
+  if (awaitingConfirm) {
+    return (
+      <div className="h-full overflow-y-auto overscroll-none bg-gradient-to-b from-slate-600 via-slate-700 to-slate-800 flex flex-col items-center justify-center p-6">
+        <div className="w-full max-w-sm py-6">
+          <div className="text-center mb-7">
+            <div className="text-6xl mb-3">📬</div>
+            <h1 className="text-3xl font-extrabold text-white drop-shadow">Fast geschafft!</h1>
+          </div>
+          <GameCard className="!p-5 text-center">
+            <p className="text-slate-700 mb-1">
+              Wir haben dir eine Bestätigungs-E-Mail an <b className="break-all">{email.trim().toLowerCase()}</b> geschickt.
+            </p>
+            <p className="text-slate-600 text-sm mb-4">
+              Klick den Link darin, dann kannst du dich anmelden. Schau notfalls im Spam-Ordner nach.
+            </p>
+            {resendMsg && <p className="text-slate-600 text-sm font-medium mb-3">{resendMsg}</p>}
+            <div className="flex flex-col gap-3">
+              <Button variant="secondary" loading={resending} onClick={handleResend} className="w-full">
+                E-Mail erneut senden
+              </Button>
+              <Button
+                variant="success"
+                className="w-full"
+                onClick={() => { setAwaitingConfirm(false); switchMode('login'); setResendMsg('') }}
+              >
+                Zur Anmeldung
+              </Button>
+            </div>
+          </GameCard>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -74,27 +121,27 @@ export function AuthPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <Input
-              label="Benutzername"
-              tone="light"
-              placeholder="Dein Name"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
-              autoComplete="username"
-            />
-
             {mode === 'register' && (
               <Input
-                label="E-Mail-Adresse"
+                label="Benutzername"
                 tone="light"
-                type="email"
-                placeholder="name@beispiel.de"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                autoComplete="email"
-                autoCapitalize="none"
+                placeholder="Dein Name"
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                autoComplete="username"
               />
             )}
+
+            <Input
+              label="E-Mail-Adresse"
+              tone="light"
+              type="email"
+              placeholder="name@beispiel.de"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              autoComplete="email"
+              autoCapitalize="none"
+            />
 
             <Input
               label="Passwort"

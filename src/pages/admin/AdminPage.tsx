@@ -17,6 +17,11 @@ type Member = WorldMember & { profile: Profile }
 
 const LIGHT_AREA = 'w-full bg-white border-2 border-[#e6d3a3] rounded-xl px-4 py-3 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-400 transition resize-none'
 
+// Anti-Exploit: Live-Events (= einzige Gem-Quelle) nur in echten Gruppen, nicht in
+// Fake-Spielwelten. Hier nur für die Anzeige – verbindlich prüft der DB-Trigger
+// trg_event_min_members, der auch bei direkten API-Aufrufen greift.
+const MIN_EVENT_MEMBERS = 5
+
 export function AdminPage() {
   const { worldId } = useParams<{ worldId: string }>()
   const { user } = useAuth()
@@ -28,6 +33,7 @@ export function AdminPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [tab, setTab] = useState<'events' | 'members' | 'campaigns' | 'settings'>('events')
   const [loading, setLoading] = useState(true)
+  const canCreateEvent = members.length >= MIN_EVENT_MEMBERS
 
   // Create event form
   const [newTitle, setNewTitle] = useState('')
@@ -41,11 +47,18 @@ export function AdminPage() {
   const [error, setError] = useState('')
 
   // Spielwelt-Einstellungen
+  const [worldName, setWorldName] = useState('')
   const [settingsDesc, setSettingsDesc] = useState('')
   const [settingsLink, setSettingsLink] = useState('')
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [settingsError, setSettingsError] = useState('')
   const [settingsSaved, setSettingsSaved] = useState(false)
+
+  // Spielwelt löschen (Gefahrenzone)
+  const [showDeleteWorld, setShowDeleteWorld] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState('')   // Name muss abgetippt werden
+  const [deletingWorld, setDeletingWorld] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   useEffect(() => { load() }, [worldId, user])
 
@@ -64,9 +77,24 @@ export function AdminPage() {
     setEvents(evRes.data ?? [])
     setCampaigns(campRes.data ?? [])
     const world = worldRes.data as World | null
+    // Schlägt das fehl, stünden Name/Beschreibung/Link still leer da – und ein Klick auf
+    // „Speichern" würde Beschreibung und Chat-Link mit null überschreiben. Deshalb laut sein.
+    if (worldRes.error) console.warn('[Admin] Spielwelt nicht geladen:', worldRes.error.message)
+    setWorldName(world?.name ?? '')
     setSettingsDesc(world?.description ?? '')
     setSettingsLink(world?.whatsapp_link ?? '')
     setLoading(false)
+  }
+
+  async function deleteWorld() {
+    setDeletingWorld(true); setDeleteError('')
+    // count: 'exact' ist hier wichtig – wird der Delete von RLS geblockt, liefert Supabase
+    // KEINEN Fehler, sondern still 0 betroffene Zeilen. Ohne die Zählung sähe das aus wie Erfolg.
+    const { error: err, count } = await supabase.from('worlds').delete({ count: 'exact' }).eq('id', worldId)
+    setDeletingWorld(false)
+    if (err) { setDeleteError(err.message); return }
+    if (!count) { setDeleteError('Löschen fehlgeschlagen – keine Berechtigung für diese Spielwelt.'); return }
+    navigate('/worlds', { replace: true })
   }
 
   async function saveSettings() {
@@ -101,6 +129,11 @@ export function AdminPage() {
   async function createEvent() {
     if (!user || !newTitle || !newStartDate || !newEndDate) {
       setError('Titel, Start- und Enddatum erforderlich.')
+      return
+    }
+    // Nur die Anzeige-Prüfung – verbindlich ist der Trigger trg_event_min_members in der DB.
+    if (!canCreateEvent) {
+      setError(`Für Live-Events werden mindestens ${MIN_EVENT_MEMBERS} Mitglieder in der Spielwelt benötigt (aktuell: ${members.length}/${MIN_EVENT_MEMBERS}).`)
       return
     }
     if (newLat == null || newLng == null) {
@@ -237,7 +270,12 @@ export function AdminPage() {
                 <LocationPicker lat={newLat} lng={newLng} onChange={(la, lo) => { setNewLat(la); setNewLng(lo) }} />
               </div>
               {error && <p className="text-red-600 text-sm font-medium">{error}</p>}
-              <Button variant="success" loading={creating} onClick={createEvent} className="w-full">Event erstellen</Button>
+              {!canCreateEvent && (
+                <p className="text-amber-700 text-sm font-medium bg-amber-50 border-2 border-amber-200 rounded-xl px-3 py-2">
+                  Für Live-Events werden mindestens {MIN_EVENT_MEMBERS} Mitglieder in der Spielwelt benötigt (aktuell: {members.length}/{MIN_EVENT_MEMBERS}).
+                </p>
+              )}
+              <Button variant="success" loading={creating} disabled={!canCreateEvent} onClick={createEvent} className="w-full">Event erstellen</Button>
             </div>
           </GameCard>
 
@@ -349,6 +387,7 @@ export function AdminPage() {
       )}
 
       {tab === 'settings' && (
+        <>
         <GameCard>
           <h2 className="font-extrabold text-slate-800 mb-3">Spielwelt-Einstellungen</h2>
           <div className="flex flex-col gap-3">
@@ -376,6 +415,54 @@ export function AdminPage() {
             <Button variant="success" loading={settingsSaving} onClick={saveSettings} className="w-full">Speichern</Button>
           </div>
         </GameCard>
+
+        <GameCard className="mt-3">
+          <h2 className="font-extrabold text-slate-800 mb-1">Spielwelt löschen</h2>
+          <p className="text-slate-600 text-sm mb-3">
+            Entfernt die Spielwelt mit allen Mitgliedern, Events und Kampagnen. Erfolge, Gems und XP
+            der Spieler bleiben erhalten. Rückgängig machen geht nicht.
+          </p>
+          <Button variant="danger" className="w-full" onClick={() => setShowDeleteWorld(true)}>Löschen</Button>
+        </GameCard>
+        </>
+      )}
+
+      {showDeleteWorld && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-6">
+          <GameCard className="w-full max-w-sm">
+            <p className="font-extrabold text-slate-800 text-lg mb-1">Spielwelt löschen?</p>
+            <p className="text-slate-600 text-sm mb-3">
+              „{worldName}" wird mit {members.length} {members.length === 1 ? 'Mitglied' : 'Mitgliedern'},{' '}
+              {events.length} {events.length === 1 ? 'Event' : 'Events'} und {campaigns.length}{' '}
+              {campaigns.length === 1 ? 'Kampagne' : 'Kampagnen'} gelöscht, samt aller Bilder und Spielergebnisse.
+            </p>
+            <p className="text-slate-600 text-sm mb-2">
+              Tippe zur Bestätigung <b className="text-slate-800">{worldName}</b> ein:
+            </p>
+            <Input
+              tone="light"
+              value={deleteConfirm}
+              onChange={e => setDeleteConfirm(e.target.value)}
+              placeholder={worldName}
+              autoCapitalize="none"
+            />
+            {deleteError && <p className="text-red-600 text-sm font-medium mt-2">{deleteError}</p>}
+            <div className="flex gap-3 mt-4">
+              <Button variant="secondary" className="flex-1" onClick={() => { setShowDeleteWorld(false); setDeleteConfirm(''); setDeleteError('') }}>
+                Abbrechen
+              </Button>
+              <Button
+                variant="danger"
+                className="flex-1"
+                loading={deletingWorld}
+                disabled={deleteConfirm.trim() !== worldName}
+                onClick={deleteWorld}
+              >
+                Löschen
+              </Button>
+            </div>
+          </GameCard>
+        </div>
       )}
 
       {memberDialog && (

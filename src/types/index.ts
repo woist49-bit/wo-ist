@@ -82,10 +82,10 @@ export interface Achievement {
   global?: boolean // nicht an eine Spielwelt gebunden (z. B. Tutorial) -> nicht in Welt-Erfolgen listen
 }
 
+// Erfolge gelten global pro Spieler – bewusst ohne Welt-Bezug.
 export interface PlayerAchievement {
   id: string
   user_id: string
-  world_id: string
   achievement_key: string
   earned_at: string
 }
