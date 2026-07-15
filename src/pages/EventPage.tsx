@@ -37,6 +37,9 @@ export function EventPage() {
   const [popupImg, setPopupImg] = useState<EventImage | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)   // Admin dieser Welt -> spielt nicht, verwaltet
   const [loading, setLoading] = useState(true)
+  // Bilder <-> Event-Rangliste. Die Rangliste lag früher unter der Bilderliste und wurde
+  // deshalb übersehen; jetzt ist sie ein gleichwertiger Tab statt eines Scroll-Ziels.
+  const [tab, setTab] = useState<'images' | 'board'>('images')
 
   useEffect(() => { if (eventId && user) load() }, [eventId, user])
 
@@ -115,6 +118,28 @@ export function EventPage() {
         </div>
       )}
 
+      {/* Umschalter: gleitender Indikator liegt als eigenes Element hinter den Buttons und
+          wird um die eigene Breite verschoben (p-1 des Containers = 0.25rem Versatz). */}
+      <div className="relative flex rounded-2xl bg-[#efe2c4] p-1 mb-5">
+        <span
+          aria-hidden
+          className="absolute top-1 bottom-1 left-1 rounded-xl bg-violet-500 shadow-[0_2px_0_#5b21b6] transition-transform duration-200 ease-out"
+          style={{ width: 'calc(50% - 0.25rem)', transform: tab === 'board' ? 'translateX(100%)' : 'translateX(0)' }}
+        />
+        {([['images', 'Bilder'], ['board', 'Event-Rangliste']] as const).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setTab(key)}
+            aria-pressed={tab === key}
+            className={`relative z-10 flex-1 py-2.5 rounded-xl font-bold text-sm transition-colors ${tab === key ? 'text-white' : 'text-slate-500'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'images' && (<>
       {images.length === 0 ? (
         <GameCard className="text-center py-12 text-slate-400">
           <p className="text-4xl mb-3">⏳</p>
@@ -233,9 +258,10 @@ export function EventPage() {
           </div>
         )}
       </GameCard>
+      </>)}
 
-      <h2 className="text-lg font-extrabold text-white mt-8 mb-3">🏆 Event-Rangliste</h2>
-      {board.length === 0 ? (
+      {tab === 'board' && (
+      board.length === 0 ? (
         <GameCard className="text-center py-8 text-slate-400 text-sm font-semibold">Noch keine Punkte gesammelt.</GameCard>
       ) : (
         <div className="flex flex-col gap-2.5">
@@ -290,7 +316,7 @@ export function EventPage() {
             )
           })}
         </div>
-      )}
+      ))}
 
       {popupImg && (() => {
         const att = attempts.get(popupImg.id) ?? null
