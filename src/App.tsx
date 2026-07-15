@@ -8,6 +8,7 @@ import { ToastContainer } from './components/ui/ToastContainer'
 import { PwaUpdatePrompt } from './components/PwaUpdatePrompt'
 import { ThemeColorManager } from './components/ThemeColorManager'
 import { AuthPage } from './pages/AuthPage'
+import { PasswordResetPage } from './pages/PasswordResetPage'
 import { DatenschutzPage } from './pages/DatenschutzPage'
 import { TutorialPage } from './pages/TutorialPage'
 import { ShopPage } from './pages/ShopPage'
@@ -56,6 +57,9 @@ export function App() {
       <ThemeColorManager />
       <Routes>
         <Route path="/" element={user ? <Navigate to="/worlds" replace /> : <AuthPage />} />
+        {/* Bewusst ohne Login-Weiche: der Link aus der Mail bringt eine Recovery-Session mit,
+            man gilt damit als eingeloggt und würde sonst direkt nach /worlds umgeleitet. */}
+        <Route path="/passwort-neu" element={<PasswordResetPage />} />
         <Route path="/datenschutz" element={<DatenschutzPage />} />
         <Route path="/tutorial" element={user ? <TutorialPage /> : <Navigate to="/" replace />} />
         <Route path="/shop" element={user ? <ShopPage /> : <Navigate to="/" replace />} />

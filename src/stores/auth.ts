@@ -91,6 +91,48 @@ export async function resendConfirmation(email: string): Promise<{ error: string
   return { error: null }
 }
 
+// Schickt den Link zum Neusetzen. Supabase meldet eine unbekannte Adresse aus
+// Datenschutzgründen NICHT als Fehler – der Aufrufer muss also neutral formulieren.
+export async function requestPasswordReset(email: string): Promise<{ error: string | null }> {
+  const { error } = await supabase.auth.resetPasswordForEmail(normalizeEmail(email), {
+    redirectTo: `${window.location.origin}/passwort-neu`,
+  })
+  if (error) {
+    if (/rate|limit|seconds|too many/i.test(error.message)) {
+      return { error: 'Bitte warte einen Moment, bevor du es erneut versuchst.' }
+    }
+    return { error: 'Senden fehlgeschlagen. Bitte versuche es später erneut.' }
+  }
+  return { error: null }
+}
+
+// Setzt das Passwort der aktuellen Session (nach Klick auf den Link aus der Mail).
+export async function updatePassword(password: string): Promise<{ error: string | null }> {
+  const { error } = await supabase.auth.updateUser({ password })
+  if (error) {
+    if (/at least|weak|short/i.test(error.message)) return { error: 'Das Passwort muss mindestens 8 Zeichen lang sein.' }
+    if (/different from the old|same.*password/i.test(error.message)) {
+      return { error: 'Das neue Passwort muss sich vom bisherigen unterscheiden.' }
+    }
+    return { error: 'Passwort konnte nicht gesetzt werden. Fordere den Link neu an.' }
+  }
+  return { error: null }
+}
+
+export async function setUsername(name: string): Promise<{ error: string | null }> {
+  const { data, error } = await supabase.rpc('set_username', { p_name: name })
+  if (error) {
+    if (error.message.includes('TAKEN')) return { error: 'Dieser Benutzername ist bereits vergeben.' }
+    if (error.message.includes('EMPTY')) return { error: 'Bitte gib einen Benutzernamen ein.' }
+    if (error.message.includes('TOO_LONG')) return { error: 'Höchstens 20 Zeichen.' }
+    return { error: 'Ändern fehlgeschlagen. Bitte versuche es erneut.' }
+  }
+  // Metadaten mitziehen, damit auth.users nicht auseinanderläuft (die Mail-Vorlagen lesen
+  // sie über {{ .Data.username }}). Schlägt das fehl, ist nur die Anrede in Mails veraltet.
+  await supabase.auth.updateUser({ data: { username: data as string } })
+  return { error: null }
+}
+
 export async function signOut() {
   await supabase.auth.signOut()
 }

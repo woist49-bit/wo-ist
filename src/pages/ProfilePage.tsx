@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback, type ChangeEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, Camera } from 'lucide-react'
+import { ChevronLeft, Camera, Pencil } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useToast } from '../stores/toast'
-import { signOut } from '../stores/auth'
+import { signOut, setUsername } from '../stores/auth'
+import { Input } from '../components/ui/Input'
 import { levelFromXp } from '../lib/scoring'
 import { ACHIEVEMENTS } from '../lib/achievements'
 import { FramedAvatar } from '../components/ui/FramedAvatar'
@@ -32,6 +33,23 @@ export function ProfilePage() {
   )
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // Benutzername ändern (nur eigenes Profil)
+  const [showRename, setShowRename] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [renaming, setRenaming] = useState(false)
+  const [renameError, setRenameError] = useState('')
+
+  async function saveUsername() {
+    setRenaming(true); setRenameError('')
+    const { error } = await setUsername(newName)
+    setRenaming(false)
+    if (error) { setRenameError(error); return }
+    setShowRename(false)
+    await load()        // Anzeige auf dieser Seite
+    refreshProfile()    // Header und Rest der App
+    addToast('Benutzername geändert.', 'success')
+  }
 
   // Sequenz-Guard: nur das Ergebnis des jeweils jüngsten load() wird übernommen
   // (schützt vor Races bei targetId-Wechsel, Unmount und Fokus-Refetch).
@@ -136,7 +154,18 @@ export function ProfilePage() {
               <FramedAvatar url={profile.avatar_url} name={profile.username} frame={profile.equipped_frame} size={64} paused={false} className="text-2xl shadow-[0_3px_0_#5b21b6,inset_0_2px_0_#ffffff4d]" />
             )}
             <div className="min-w-0">
-              <p className="text-xl font-extrabold text-white truncate">{profile.username}</p>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <p className="text-xl font-extrabold text-white truncate">{profile.username}</p>
+                {isOwn && (
+                  <button
+                    onClick={() => { setNewName(profile.username); setRenameError(''); setShowRename(true) }}
+                    aria-label="Benutzernamen ändern"
+                    className="flex-shrink-0 w-7 h-7 rounded-full bg-white/20 text-white flex items-center justify-center active:scale-95 transition-transform"
+                  >
+                    <Pencil size={13} strokeWidth={2.75} />
+                  </button>
+                )}
+              </div>
               <p className="text-sky-100 font-bold text-sm">Level {level}</p>
             </div>
           </div>
@@ -226,6 +255,39 @@ export function ProfilePage() {
           )}
         </div>
       </div>
+
+      {showRename && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-6">
+          <GameCard className="w-full max-w-sm">
+            <p className="font-extrabold text-slate-800 text-lg mb-1">Benutzername ändern</p>
+            <p className="text-slate-600 text-sm mb-3">
+              Dein Name ist überall sichtbar – in Ranglisten, Erfolgen und Spielwelten. Er muss
+              eindeutig sein.
+            </p>
+            <Input
+              tone="light"
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              placeholder="Dein Name"
+              maxLength={20}
+              autoFocus
+            />
+            {renameError && <p className="text-red-600 text-sm font-medium mt-2">{renameError}</p>}
+            <div className="flex gap-3 mt-4">
+              <Button variant="secondary" className="flex-1" onClick={() => setShowRename(false)}>Abbrechen</Button>
+              <Button
+                variant="success"
+                className="flex-1"
+                loading={renaming}
+                disabled={!newName.trim() || newName.trim() === profile.username}
+                onClick={saveUsername}
+              >
+                Speichern
+              </Button>
+            </div>
+          </GameCard>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { signIn, signUp, resendConfirmation } from '../stores/auth'
+import { signIn, signUp, resendConfirmation, requestPasswordReset } from '../stores/auth'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { GameCard } from '../components/ui/GameCard'
@@ -19,6 +19,11 @@ export function AuthPage() {
   const [awaitingConfirm, setAwaitingConfirm] = useState(false)
   const [resendMsg, setResendMsg] = useState('')
   const [resending, setResending] = useState(false)
+  // Passwort vergessen: eigene Ansicht statt dritter Tab – der Umschalter oben bleibt
+  // bei den zwei Wegen, die man normalerweise geht.
+  const [showReset, setShowReset] = useState(false)
+  const [resetMsg, setResetMsg] = useState('')
+  const [resetting, setResetting] = useState(false)
   const navigate = useNavigate()
 
   function switchMode(m: 'login' | 'register') {
@@ -56,6 +61,17 @@ export function AuthPage() {
     navigate('/worlds')
   }
 
+  async function handleReset(e: FormEvent) {
+    e.preventDefault()
+    if (!email.trim()) { setError('Bitte gib deine E-Mail-Adresse ein.'); return }
+    setResetting(true); setError('')
+    const { error } = await requestPasswordReset(email)
+    setResetting(false)
+    if (error) { setError(error); return }
+    // Bewusst neutral: Supabase verrät nicht, ob die Adresse registriert ist – wir also auch nicht.
+    setResetMsg('Falls ein Konto mit dieser Adresse existiert, ist der Link unterwegs. Schau notfalls im Spam-Ordner nach.')
+  }
+
   async function handleResend() {
     setResending(true); setResendMsg('')
     const { error } = await resendConfirmation(email)
@@ -91,6 +107,58 @@ export function AuthPage() {
                 Zur Anmeldung
               </Button>
             </div>
+          </GameCard>
+        </div>
+      </div>
+    )
+  }
+
+  if (showReset) {
+    return (
+      <div className="h-full overflow-y-auto overscroll-none bg-gradient-to-b from-slate-600 via-slate-700 to-slate-800 flex flex-col items-center justify-center p-6">
+        <div className="w-full max-w-sm py-6">
+          <div className="text-center mb-7">
+            <div className="text-6xl mb-3">🔑</div>
+            <h1 className="text-3xl font-extrabold text-white drop-shadow">Passwort vergessen</h1>
+          </div>
+          <GameCard className="!p-5">
+            {resetMsg ? (
+              <div className="text-center">
+                <p className="text-slate-700 text-sm mb-4">{resetMsg}</p>
+                <Button variant="success" className="w-full" onClick={() => { setShowReset(false); setResetMsg(''); setError('') }}>
+                  Zur Anmeldung
+                </Button>
+              </div>
+            ) : (
+              <form onSubmit={handleReset} className="flex flex-col gap-4">
+                <p className="text-slate-600 text-sm">
+                  Gib deine E-Mail-Adresse ein – wir schicken dir einen Link, mit dem du ein neues
+                  Passwort vergeben kannst.
+                </p>
+                <Input
+                  label="E-Mail-Adresse"
+                  tone="light"
+                  type="email"
+                  placeholder="name@beispiel.de"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  autoComplete="email"
+                  autoCapitalize="none"
+                  autoFocus
+                />
+                {error && <p className="text-red-600 text-sm text-center font-medium">{error}</p>}
+                <Button type="submit" variant="success" size="lg" loading={resetting} className="w-full">
+                  Link senden
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => { setShowReset(false); setError('') }}
+                  className="text-sm font-semibold text-slate-500 underline"
+                >
+                  Zurück zur Anmeldung
+                </button>
+              </form>
+            )}
           </GameCard>
         </div>
       </div>
@@ -185,6 +253,16 @@ export function AuthPage() {
             <Button type="submit" variant="success" size="lg" loading={loading} disabled={!canSubmit} className="w-full mt-1">
               {mode === 'login' ? 'Anmelden' : 'Konto erstellen'}
             </Button>
+
+            {mode === 'login' && (
+              <button
+                type="button"
+                onClick={() => { setShowReset(true); setError(''); setResetMsg('') }}
+                className="text-sm font-semibold text-slate-500 underline mx-auto"
+              >
+                Passwort vergessen?
+              </button>
+            )}
           </form>
         </GameCard>
       </div>

@@ -213,6 +213,12 @@ alter table campaign_progress enable row level security;
 create policy "Public profiles are viewable" on profiles for select using (true);
 create policy "Users can update own profile" on profiles for update using (auth.uid() = id);
 create policy "Users can insert own profile" on profiles for insert with check (auth.uid() = id);
+-- Die Policy oben regelt nur die ZEILE, nicht die SPALTEN – ohne diese Grants könnte jeder
+-- per Konsole seine eigenen gems/global_xp hochsetzen und das ganze Ledger umgehen.
+-- avatar_url ist die einzige Spalte, die der Client direkt schreibt; equipped_frame,
+-- tutorial_completed und username laufen über RPCs, Gems/XP über das Ledger.
+revoke update on profiles from anon, authenticated;
+grant update (avatar_url) on profiles to authenticated;
 
 -- worlds
 create policy "Members can view their worlds" on worlds for select
@@ -778,6 +784,29 @@ begin
   return v_world_id;
 end;
 $$;
+
+-- Benutzername ändern. Als RPC statt als Spalten-Grant: so bleiben username und
+-- username_key garantiert synchron (der Unique-Index hängt am key).
+create or replace function set_username(p_name text)
+returns text language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_display text;
+  v_key text;
+begin
+  if v_uid is null then raise exception 'NOT_AUTHENTICATED'; end if;
+  v_display := regexp_replace(trim(coalesce(p_name, '')), '\s+', ' ', 'g');
+  if v_display = '' then raise exception 'EMPTY'; end if;
+  if char_length(v_display) > 20 then raise exception 'TOO_LONG'; end if;
+  v_key := lower(v_display);
+  if exists (select 1 from profiles where username_key = v_key and id <> v_uid) then
+    raise exception 'TAKEN';
+  end if;
+  update profiles set username = v_display, username_key = v_key where id = v_uid;
+  return v_display;
+end;
+$$;
+grant execute on function set_username(text) to authenticated;
 
 -- Liste der öffentlichen Spielwelten, denen man noch nicht beigetreten ist.
 -- security definer, weil der Aufrufer kein Mitglied ist: world_members, campaigns und
