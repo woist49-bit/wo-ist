@@ -301,12 +301,26 @@ export function WorldsPage() {
                 // div statt button: der Daumen-hoch ist ein eigener Button und darf nicht in
                 // einem Button verschachtelt sein (ungültiges HTML, kaputte Klick-Ziele).
                 <div key={w.id} onClick={() => navigate(`/world/${w.id}`)} className="relative w-full text-left active:translate-y-[2px] transition-transform cursor-pointer">
-                  {isAdmin && (
-                    <span className="absolute -top-2 right-4 z-10 inline-flex items-center gap-1 bg-amber-400 text-amber-950 rounded-full px-2 py-0.5 text-[11px] font-extrabold shadow-[0_2px_0_#0000002e,inset_0_1px_0_#ffffff80]">
-                      <Crown size={12} strokeWidth={2.75} /> Admin
-                    </span>
+                  {/* Statusbadges der Welt: der Streifen über der Kachel ist sonst leer und
+                      kollidiert weder mit dem LIVE-Badge am Namen noch mit der Kennzahlen-Zeile. */}
+                  {(isAdmin || w.is_public) && (
+                    <div className="absolute -top-2 right-4 z-10 flex items-center gap-1.5">
+                      {w.is_public && (
+                        <span className="inline-flex items-center gap-1 bg-sky-500 text-white rounded-full px-2 py-0.5 text-[11px] font-extrabold shadow-[0_2px_0_#0000002e,inset_0_1px_0_#ffffff59]">
+                          <Globe size={12} strokeWidth={2.75} /> Öffentlich
+                        </span>
+                      )}
+                      {isAdmin && (
+                        <span className="inline-flex items-center gap-1 bg-amber-400 text-amber-950 rounded-full px-2 py-0.5 text-[11px] font-extrabold shadow-[0_2px_0_#0000002e,inset_0_1px_0_#ffffff80]">
+                          <Crown size={12} strokeWidth={2.75} /> Admin
+                        </span>
+                      )}
+                    </div>
                   )}
-                  <GameCard style={isAdmin ? { borderColor: '#f59e0b' } : undefined}>
+                  {/* Bewusst ohne farbigen Rahmen: Admin und Öffentlich stehen als Badges
+                      darüber im Klartext. Ein Farbcode würde dasselbe nochmal sagen, wäre für
+                      neue Spieler nicht lesbar und ginge beim nächsten Attribut aus. */}
+                  <GameCard>
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
@@ -321,11 +335,6 @@ export function WorldsPage() {
                         <div className="flex items-center gap-3 mt-2 text-xs font-semibold text-slate-500">
                           <span className="inline-flex items-center gap-1"><Users size={13} strokeWidth={2.5} /> {s?.members ?? '–'}</span>
                           <span className="inline-flex items-center gap-1"><Layers size={13} strokeWidth={2.5} /> {s?.campaigns ?? 0} {(s?.campaigns ?? 0) === 1 ? 'Kampagne' : 'Kampagnen'}</span>
-                          {/* Nur hier sinnvoll – in der öffentlichen Liste ist ohnehin alles öffentlich.
-                              Bewusst kein Rahmen/keine Kachelfarbe: die sind schon für „Admin" vergeben. */}
-                          {w.is_public && (
-                            <span className="inline-flex items-center gap-1 text-sky-600 flex-shrink-0"><Globe size={13} strokeWidth={2.5} /> Öffentlich</span>
-                          )}
                           {s?.activeEvent && <span className="text-rose-500 truncate">· {s.activeEvent}</span>}
                         </div>
                       </div>
