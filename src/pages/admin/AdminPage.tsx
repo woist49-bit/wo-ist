@@ -9,6 +9,7 @@ import { FramedAvatar } from '../../components/ui/FramedAvatar'
 import { Button } from '../../components/ui/Button'
 import { GameCard } from '../../components/ui/GameCard'
 import { Input } from '../../components/ui/Input'
+import { Toggle } from '../../components/ui/Toggle'
 import { DescriptionInput } from '../../components/ui/DescriptionInput'
 import { LocationPicker } from '../../components/admin/LocationPicker'
 import type { WorldMember, LiveEvent, Profile, Campaign, World } from '../../types'
@@ -49,6 +50,7 @@ export function AdminPage() {
   // Spielwelt-Einstellungen
   const [worldName, setWorldName] = useState('')
   const [settingsDesc, setSettingsDesc] = useState('')
+  const [settingsPublic, setSettingsPublic] = useState(false)
   const [settingsLink, setSettingsLink] = useState('')
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [settingsError, setSettingsError] = useState('')
@@ -82,6 +84,7 @@ export function AdminPage() {
     if (worldRes.error) console.warn('[Admin] Spielwelt nicht geladen:', worldRes.error.message)
     setWorldName(world?.name ?? '')
     setSettingsDesc(world?.description ?? '')
+    setSettingsPublic(world?.is_public ?? false)
     setSettingsLink(world?.whatsapp_link ?? '')
     setLoading(false)
   }
@@ -113,6 +116,7 @@ export function AdminPage() {
     setSettingsSaving(true)
     const { error: err } = await supabase.from('worlds').update({
       description: settingsDesc.trim() || null,
+      is_public: settingsPublic,
       whatsapp_link: link || null,
     }).eq('id', worldId)
     setSettingsSaving(false)
@@ -401,6 +405,12 @@ export function AdminPage() {
                 className={LIGHT_AREA}
               />
             </div>
+            <Toggle
+              checked={settingsPublic}
+              onChange={v => { setSettingsPublic(v); setSettingsSaved(false) }}
+              label="Öffentlich"
+              hint="Für alle im „Beitreten“-Bereich sichtbar – Beitritt ohne Einladungscode"
+            />
             <Input
               tone="light"
               label="WhatsApp-Gruppenlink"

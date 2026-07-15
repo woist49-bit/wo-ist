@@ -16,9 +16,21 @@ export interface World {
   name: string
   description: string | null
   whatsapp_link: string | null
+  is_public: boolean
   join_code: string
   created_by: string
   created_at: string
+}
+
+// Zeile aus der public_worlds()-RPC: bewusst ohne join_code (Einladungscode bleibt privat)
+export interface PublicWorld {
+  id: string
+  name: string
+  description: string | null
+  members: number
+  campaigns: number
+  active_event: string | null
+  likes: number
 }
 
 export interface WorldMember {

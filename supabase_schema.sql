@@ -73,6 +73,18 @@ create table worlds (
 -- Für bestehende Datenbanken (Spalten nachrüsten):
 alter table worlds add column if not exists description text;
 alter table worlds add column if not exists whatsapp_link text;
+-- Öffentlich = im „Beitreten"-Bereich für alle sichtbar und ohne Code beitretbar.
+alter table worlds add column if not exists is_public boolean not null default false;
+
+-- Daumen-hoch pro Spielwelt. Der Primärschlüssel ist zugleich der Unique-Constraint:
+-- ein Nutzer kann eine Spielwelt genau einmal bewerten. Ohne Bezug zu Punkten/Gems/XP.
+create table if not exists world_likes (
+  world_id uuid not null references worlds(id) on delete cascade,
+  user_id uuid not null references profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (world_id, user_id)
+);
+alter table world_likes enable row level security;
 
 create table world_members (
   world_id uuid references worlds(id) on delete cascade,
@@ -255,6 +267,19 @@ create policy "Members can view events" on live_events for select
   using (exists (select 1 from world_members where world_id = live_events.world_id and user_id = auth.uid()));
 create policy "Admins can manage events" on live_events for all
   using (exists (select 1 from world_members where world_id = live_events.world_id and user_id = auth.uid() and role = 'admin'));
+
+-- world_likes: Bewertungen sieht man nur für Welten, in denen man Mitglied ist. Die Zahlen
+-- für die öffentliche Liste liefert public_worlds() (security definer).
+create policy "Members can view likes" on world_likes for select
+  using (exists (select 1 from world_members wm where wm.world_id = world_likes.world_id and wm.user_id = auth.uid()));
+-- Bewerten erst NACH dem Beitritt – serverseitig, nicht nur im UI ausgeblendet.
+create policy "Members can like" on world_likes for insert
+  with check (
+    auth.uid() = user_id
+    and exists (select 1 from world_members wm where wm.world_id = world_likes.world_id and wm.user_id = auth.uid())
+  );
+create policy "Own like can be removed" on world_likes for delete
+  using (auth.uid() = user_id);
 
 -- Anti-Exploit: Live-Events erst ab 5 Mitgliedern (Admin mitgezählt). Verhindert, dass sich
 -- jemand mit einer Fake-Spielwelt beliebig Events (= Gem-Quelle) selbst anlegt.
@@ -725,12 +750,19 @@ language sql security definer as $$
   order by total_points desc;
 $$;
 
+-- Der auth.uid()-Guard ist Pflicht: profiles ist für alle lesbar (Ranglisten), ohne ihn
+-- könnte jeder fremde User-IDs abgreifen und sie mit dem eigenen Code in die eigene Welt
+-- zwingen – und damit die „5 Mitglieder für Live-Events"-Regel beliebig fälschen.
 create or replace function join_world(p_user_id uuid, p_join_code text)
 returns uuid
-language plpgsql security definer as $$
+language plpgsql security definer set search_path = public as $$
 declare
   v_world_id uuid;
 begin
+  if auth.uid() is not null and auth.uid() <> p_user_id then
+    raise exception 'not allowed';
+  end if;
+
   select worlds.id into v_world_id from worlds where worlds.join_code = upper(p_join_code);
 
   if v_world_id is null then
@@ -746,6 +778,61 @@ begin
   return v_world_id;
 end;
 $$;
+
+-- Liste der öffentlichen Spielwelten, denen man noch nicht beigetreten ist.
+-- security definer, weil der Aufrufer kein Mitglied ist: world_members, campaigns und
+-- live_events sind für ihn per RLS unsichtbar. Gibt bewusst NICHT join_code zurück –
+-- sonst wäre der Einladungscode jeder öffentlichen Welt für jeden abgreifbar.
+create or replace function public_worlds()
+returns table (
+  id uuid,
+  name text,
+  description text,
+  members bigint,
+  campaigns bigint,
+  active_event text,
+  likes bigint
+)
+language sql security definer set search_path = public stable as $$
+  select
+    w.id,
+    w.name,
+    w.description,
+    (select count(*) from world_members wm where wm.world_id = w.id),
+    (select count(*) from campaigns c where c.world_id = w.id),
+    (select le.title from live_events le
+      where le.world_id = w.id and le.status = 'active'
+      order by le.starts_at desc limit 1),
+    (select count(*) from world_likes wl where wl.world_id = w.id)
+  from worlds w
+  where w.is_public
+    and auth.uid() is not null
+    and not exists (
+      select 1 from world_members wm where wm.world_id = w.id and wm.user_id = auth.uid()
+    )
+  order by 7 desc, w.created_at desc   -- beliebteste zuerst
+$$;
+grant execute on function public_worlds() to authenticated;
+
+-- Beitritt ohne Code, nur in öffentliche Welten. auth.uid() statt Parameter -> niemand
+-- kann Fremde eintragen.
+create or replace function join_public_world(p_world_id uuid)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then raise exception 'NOT_AUTHENTICATED'; end if;
+  if not exists (select 1 from worlds where id = p_world_id and is_public) then
+    raise exception 'NOT_PUBLIC';
+  end if;
+  if exists (select 1 from world_members where world_id = p_world_id and user_id = v_uid) then
+    raise exception 'ALREADY_MEMBER';
+  end if;
+  insert into world_members (world_id, user_id, role) values (p_world_id, v_uid, 'user');
+  return p_world_id;
+end;
+$$;
+grant execute on function join_public_world(uuid) to authenticated;
 
 -- Rolle eines Mitglieds ändern (nur durch Welt-Admins). Bei Beförderung zum Admin
 -- werden ALLE in dieser Welt gesammelten Spieldaten des Nutzers gelöscht -> Start bei 0,
