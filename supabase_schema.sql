@@ -25,6 +25,10 @@ alter table profiles add column if not exists avatar_url text;
 
 -- Normalisierter Benutzername (getrimmt, einfache Leerzeichen, kleingeschrieben) für Eindeutigkeit.
 -- UNIQUE, nicht nur Index: sonst können zwei gleichzeitige Signups denselben Namen belegen.
+-- Punkte aus inzwischen gelöschten Spielwelten (siehe keep_points_on_world_delete).
+-- Für Clients nicht schreibbar – nur der Trigger fasst die Spalte an.
+alter table profiles add column if not exists legacy_points bigint not null default 0;
+
 alter table profiles add column if not exists username_key text;
 update profiles set username_key = lower(regexp_replace(trim(username), '\s+', ' ', 'g')) where username_key is null;
 create unique index if not exists profiles_username_key_uniq on profiles (username_key);
@@ -66,7 +70,9 @@ create table worlds (
   description text,
   whatsapp_link text,
   join_code text unique not null,
-  created_by uuid references profiles(id),
+  -- set null, nicht cascade: wird der Ersteller-Account gelöscht, bleibt die Welt bestehen.
+  -- Ohne on-delete-Regel (Default NO ACTION) liesse sich der Account gar nicht löschen.
+  created_by uuid references profiles(id) on delete set null,
   created_at timestamptz not null default now()
 );
 
@@ -105,7 +111,7 @@ create table live_events (
   starts_at timestamptz not null,
   ends_at timestamptz not null,
   status text not null default 'draft' check (status in ('draft', 'active', 'finished')),
-  created_by uuid references profiles(id),
+  created_by uuid references profiles(id) on delete set null,   -- Account löschbar halten
   created_at timestamptz not null default now()
 );
 
@@ -125,7 +131,7 @@ create table event_images (
   target_x float8 not null default 0.5,
   target_y float8 not null default 0.5,
   target_radius float8 not null default 0.05,
-  uploaded_by uuid references profiles(id),
+  uploaded_by uuid references profiles(id) on delete set null,   -- Account löschbar halten
   created_at timestamptz not null default now()
 );
 
@@ -228,9 +234,42 @@ create policy "Authenticated users can create worlds" on worlds for insert
 create policy "Admins can update their world" on worlds for update
   using (exists (select 1 from world_members where world_id = worlds.id and user_id = auth.uid() and role = 'admin'));
 -- Löschen räumt per Cascade alles ab, was an der Welt hängt (Mitgliedschaften, Events,
--- Bilder, Versuche, Kampagnen, Fortschritte). Erfolge/Gems/XP hängen am Profil und bleiben.
+-- Bilder, Versuche, Kampagnen, Fortschritte). Erfolge/Gems/XP hängen am Profil und bleiben;
+-- die Punkte rettet der Trigger keep_points_before_world_delete nach profiles.legacy_points.
 create policy "Admins can delete their world" on worlds for delete
   using (exists (select 1 from world_members where world_id = worlds.id and user_id = auth.uid() and role = 'admin'));
+
+-- Punkte liegen pro Zeile in player_attempts/campaign_progress und hängen über
+-- Bild -> Event -> Welt an der Spielwelt – beim Löschen fiele die ganze Kette. Verdient
+-- sind sie trotzdem, also vorher aufsummieren und ans Profil hängen.
+-- BEFORE DELETE: die Fremdschlüssel-Aktionen (Cascade) laufen erst nach dem Löschen der
+-- Zeile, hier existieren die Punkte also noch.
+create or replace function keep_points_on_world_delete() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  with pts as (
+    select pa.user_id, pa.points as p            -- Live: über das Bild an der Welt
+    from player_attempts pa
+    join event_images ei on ei.id = pa.image_id
+    where ei.world_id = old.id
+    union all
+    select cp.user_id, cp.points                 -- Kampagne: direkt an der Welt
+    from campaign_progress cp
+    where cp.world_id = old.id
+  ),
+  agg as (select user_id, sum(p)::bigint as total from pts group by user_id)
+  update profiles pr
+  set legacy_points = pr.legacy_points + agg.total
+  from agg
+  where pr.id = agg.user_id and agg.total > 0;
+  return old;
+end;
+$$;
+
+drop trigger if exists keep_points_before_world_delete on worlds;
+create trigger keep_points_before_world_delete
+  before delete on worlds
+  for each row execute function keep_points_on_world_delete();
 
 -- world_members
 create policy "Members can view memberships" on world_members for select
@@ -663,7 +702,8 @@ language sql security definer as $$
   )
   select
     p.id, p.username,
-    coalesce(pt.pts, 0),
+    -- legacy_points dazu, sonst zeigt das Profil (user_totals) eine andere Zahl als die Rangliste
+    (coalesce(pt.pts, 0) + p.legacy_points)::bigint,
     coalesce(w.cnt, 0),
     coalesce(a.cnt, 0),
     p.global_xp::bigint
@@ -671,7 +711,7 @@ language sql security definer as $$
   left join points pt on pt.user_id = p.id
   left join achievements a on a.user_id = p.id
   left join wins w on w.user_id = p.id
-  order by coalesce(pt.pts, 0) desc, p.global_xp desc
+  order by (coalesce(pt.pts, 0) + p.legacy_points) desc, p.global_xp desc
   limit 100;
 $$;
 
@@ -719,10 +759,12 @@ create or replace function user_totals(p_user_id uuid)
 returns table(total_points bigint, wins bigint)
 language sql security definer as $$
   select
-    -- Gesamtpunkte über alle Welten (Live + Kampagne)
+    -- Gesamtpunkte über alle Welten (Live + Kampagne) + Punkte gelöschter Welten
     (coalesce((select sum(points) from player_attempts where user_id = p_user_id), 0)
-     + coalesce((select sum(points) from campaign_progress where user_id = p_user_id), 0))::bigint,
-    -- Siege = Rang 1 nach Punkten in beendeten Events (alle Welten, Punkte > 0)
+     + coalesce((select sum(points) from campaign_progress where user_id = p_user_id), 0)
+     + coalesce((select legacy_points from profiles where id = p_user_id), 0))::bigint,
+    -- Siege = Rang 1 nach Punkten in beendeten Events (alle Welten, Punkte > 0).
+    -- Hängen strukturell an der Event-Historie und gehen mit der Welt verloren.
     (select count(*)::bigint from (
        select ep.user_id, rank() over (partition by ep.event_id order by ep.pts desc) as rnk
        from (
