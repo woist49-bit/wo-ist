@@ -254,19 +254,22 @@ export function WorldsPage() {
                   <div
                     key={w.id}
                     onClick={() => { setJoinTarget(w); setJoinError('') }}
-                    className="w-full text-left active:translate-y-[2px] transition-transform cursor-pointer"
+                    className="relative w-full text-left active:translate-y-[2px] transition-transform cursor-pointer"
                   >
+                    {/* Badge sitzt oben im Streifen wie bei „Deine Spielwelten“ – beide Listen
+                        benutzen dieselbe Kachel und sollen sich gleich verhalten. Ein
+                        „Öffentlich“-Badge fehlt hier bewusst: hier ist ohnehin alles öffentlich. */}
+                    {w.active_event && (
+                      <div className="absolute -top-2 right-4 z-10 flex items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1 bg-rose-500 text-white rounded-full px-2 py-0.5 text-[11px] font-extrabold shadow-[0_2px_0_#0000002e,inset_0_1px_0_#ffffff59]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> Live-Event
+                        </span>
+                      </div>
+                    )}
                     <GameCard>
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-extrabold text-slate-800 truncate">{w.name}</p>
-                            {w.active_event && (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-white bg-rose-500 rounded-full px-2 py-0.5 flex-shrink-0 shadow-[inset_0_1px_0_#ffffff59]">
-                                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> LIVE
-                              </span>
-                            )}
-                          </div>
+                          <p className="font-extrabold text-slate-800 truncate">{w.name}</p>
                           {w.description && <p className="text-slate-500 text-xs mt-0.5 line-clamp-1">{w.description}</p>}
                           <div className="flex items-center gap-3 mt-2 text-xs font-semibold text-slate-500">
                             <span className="inline-flex items-center gap-1"><Users size={13} strokeWidth={2.5} /> {w.members}</span>
@@ -302,9 +305,14 @@ export function WorldsPage() {
                 // einem Button verschachtelt sein (ungültiges HTML, kaputte Klick-Ziele).
                 <div key={w.id} onClick={() => navigate(`/world/${w.id}`)} className="relative w-full text-left active:translate-y-[2px] transition-transform cursor-pointer">
                   {/* Statusbadges der Welt: der Streifen über der Kachel ist sonst leer und
-                      kollidiert weder mit dem LIVE-Badge am Namen noch mit der Kennzahlen-Zeile. */}
-                  {(isAdmin || w.is_public) && (
+                      lässt Namens- und Kennzahlen-Zeile die volle Breite. */}
+                  {(isAdmin || w.is_public || s?.activeEvent) && (
                     <div className="absolute -top-2 right-4 z-10 flex items-center gap-1.5">
+                      {s?.activeEvent && (
+                        <span className="inline-flex items-center gap-1 bg-rose-500 text-white rounded-full px-2 py-0.5 text-[11px] font-extrabold shadow-[0_2px_0_#0000002e,inset_0_1px_0_#ffffff59]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> Live-Event
+                        </span>
+                      )}
                       {w.is_public && (
                         <span className="inline-flex items-center gap-1 bg-sky-500 text-white rounded-full px-2 py-0.5 text-[11px] font-extrabold shadow-[0_2px_0_#0000002e,inset_0_1px_0_#ffffff59]">
                           <Globe size={12} strokeWidth={2.75} /> Öffentlich
@@ -323,14 +331,9 @@ export function WorldsPage() {
                   <GameCard>
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="font-extrabold text-slate-800 truncate">{w.name}</p>
-                          {s?.activeEvent && (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-white bg-rose-500 rounded-full px-2 py-0.5 flex-shrink-0 shadow-[inset_0_1px_0_#ffffff59]">
-                              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> LIVE
-                            </span>
-                          )}
-                        </div>
+                        {/* LIVE sitzt jetzt oben im Badge-Streifen – die Namenszeile hat dadurch
+                            die volle Breite und bricht bei langen Weltnamen später um. */}
+                        <p className="font-extrabold text-slate-800 truncate">{w.name}</p>
                         {w.description && <p className="text-slate-500 text-xs mt-0.5 line-clamp-1">{w.description}</p>}
                         <div className="flex items-center gap-3 mt-2 text-xs font-semibold text-slate-500">
                           <span className="inline-flex items-center gap-1"><Users size={13} strokeWidth={2.5} /> {s?.members ?? '–'}</span>
