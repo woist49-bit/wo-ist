@@ -320,7 +320,11 @@ export function EventPage() {
 
       {popupImg && (() => {
         const att = attempts.get(popupImg.id) ?? null
-        const status: ImageStatus = att ? 'played' : new Date(popupImg.unlocks_at).getTime() > now ? 'locked' : 'open'
+        const popupUnlockMs = new Date(popupImg.unlocks_at).getTime()
+        const status: ImageStatus = att ? 'played'
+          : popupUnlockMs > now ? 'locked'
+          : now >= popupUnlockMs + IMAGE_PLAY_WINDOW_MS ? 'expired'   // 24h-Fenster vorbei
+          : 'open'
         const idx = images.findIndex(i => i.id === popupImg.id)
         return (
           <EventImagePopup

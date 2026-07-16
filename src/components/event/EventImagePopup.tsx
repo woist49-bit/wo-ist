@@ -9,7 +9,7 @@ import { formatCountdown } from '../../lib/time'
 import { useServerNow } from '../../hooks/useServerNow'
 import type { EventImage, PlayerAttempt } from '../../types'
 
-export type ImageStatus = 'locked' | 'open' | 'played'
+export type ImageStatus = 'locked' | 'open' | 'played' | 'expired'
 
 interface DebuffCount { debuff_type: string; stacks: number }
 interface TargetPlayer { user_id: string; username: string; avatar_url: string | null; active_debuffs: DebuffCount[] }
@@ -148,8 +148,8 @@ export function EventImagePopup({ image, index, status, attempt, inventory, onCl
             {status === 'locked' ? (
               <Lock size={30} strokeWidth={2.5} className="text-slate-500" />
             ) : (
-              // Vorschau vor dem Spielen unscharf, damit man nicht schon suchen kann (bei 'played' scharf)
-              <img src={image.image_url} alt="" className={`w-full h-full object-cover ${status === 'open' ? 'blur-md scale-110' : ''}`} />
+              // Vorschau unscharf, solange nicht gespielt (bei 'played' scharf; 'expired' bleibt unscharf)
+              <img src={image.image_url} alt="" className={`w-full h-full object-cover ${status === 'open' || status === 'expired' ? 'blur-md scale-110' : ''}`} />
             )}
             {status === 'open' && (
               <div className="absolute inset-0 flex items-center justify-center">
@@ -260,6 +260,17 @@ export function EventImagePopup({ image, index, status, attempt, inventory, onCl
                 </>
               )}
 
+              {status === 'expired' && (
+                <div className="text-center py-6">
+                  <p className="text-4xl mb-2">⌛</p>
+                  <p className="font-extrabold text-slate-700">Spielzeit abgelaufen</p>
+                  <p className="text-sm text-slate-500 mt-1">
+                    Dieses Bild war 24 Stunden lang spielbar. Das Zeitfenster ist vorbei – es kann
+                    nicht mehr gespielt werden.
+                  </p>
+                </div>
+              )}
+
               {status === 'played' && (
                 <PlayedContent attempt={attempt} armed={armed} received={received} />
               )}
@@ -274,6 +285,9 @@ export function EventImagePopup({ image, index, status, attempt, inventory, onCl
               )}
               {status === 'locked' && (
                 <div className="w-full text-center bg-slate-200 text-slate-500 font-bold rounded-2xl py-3">Noch gesperrt</div>
+              )}
+              {status === 'expired' && (
+                <div className="w-full text-center bg-slate-200 text-slate-500 font-bold rounded-2xl py-3">Abgelaufen</div>
               )}
               {status === 'played' && (
                 <Button variant="secondary" size="lg" className="w-full" onClick={onViewResult}>Auflösung ansehen</Button>

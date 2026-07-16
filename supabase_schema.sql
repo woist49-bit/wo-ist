@@ -359,15 +359,19 @@ create policy "Admins can manage images" on event_images for all
 -- player_attempts
 create policy "Users can view own attempts" on player_attempts for select
   using (auth.uid() = user_id);
--- Insert nur fuer eigene Versuche UND nur wenn das Bild serverseitig bereits freigeschaltet ist
--- (unlocks_at <= now()). Verhindert vorzeitiges Spielen durch manipulierte Geraete-Uhr/Client.
+-- Insert nur fuer eigene Versuche UND nur INNERHALB des Spielfensters [unlocks_at, +24h).
+-- Untergrenze: verhindert vorzeitiges Spielen (manipulierte Geraete-Uhr/Client).
+-- Obergrenze: nach 24h ist das Bild endgueltig durch – kein spaeter Versuch, keine Punkte.
+-- 24h konsistent mit IMAGE_PLAY_WINDOW_MS (Frontend) und dem last_minute-Achievement.
 -- Betrifft nur Live-Events (Kampagnen laufen ueber campaign_progress, nicht player_attempts).
 create policy "Users can insert own attempt" on player_attempts for insert
   with check (
     auth.uid() = user_id
     and exists (
       select 1 from event_images ei
-      where ei.id = player_attempts.image_id and ei.unlocks_at <= now()
+      where ei.id = player_attempts.image_id
+        and ei.unlocks_at <= now()
+        and ei.unlocks_at > now() - interval '24 hours'
     )
   );
 create policy "Admins can view all attempts" on player_attempts for select

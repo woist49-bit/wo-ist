@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Lock } from 'lucide-react'
+import { Lock, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { GameCard } from '../components/ui/GameCard'
@@ -110,14 +110,21 @@ export function CampaignPage() {
               >
                 <GameCard className={isAdmin ? '!border-sky-300' : !tappable ? 'opacity-50' : current ? '!border-violet-400' : ''}>
                   <div className="flex items-center gap-4">
-                    <div className="relative w-20 h-14 rounded-xl overflow-hidden bg-slate-300 flex-shrink-0">
-                      {tappable ? (
+                    <div className="relative w-20 h-14 rounded-xl overflow-hidden bg-slate-300 flex-shrink-0 flex items-center justify-center">
+                      {!tappable ? (
+                        <Lock size={22} strokeWidth={2.5} className="text-slate-500" />
+                      ) : (
                         <>
-                          <img src={img.image_url} alt="" className="w-full h-full object-cover" />
+                          {/* Aktives, noch nicht gefundenes Bild unscharf – wie im Live-Event, damit
+                              man die Person nicht schon in der Miniatur suchen kann. */}
+                          <img src={img.image_url} alt="" className={`w-full h-full object-cover ${!isAdmin && !completed ? 'blur-[5px] scale-110' : ''}`} />
+                          {!isAdmin && !completed && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/30 text-white">
+                              <Search size={20} strokeWidth={2.5} />
+                            </div>
+                          )}
                           {!isAdmin && completed && <div className="absolute top-1 right-1 bg-green-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shadow">✓</div>}
                         </>
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-slate-500"><Lock size={22} strokeWidth={2.5} /></div>
                       )}
                     </div>
                     <div className="flex-1 min-w-0">

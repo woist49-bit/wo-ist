@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useNotifications } from '../stores/notifications'
 import { useToast } from '../stores/toast'
 import { calcPoints, isHit, levelFromXp, effectiveElapsed, timeWarpRate } from '../lib/scoring'
+import { IMAGE_PLAY_WINDOW_MS } from '../lib/time'
 import { getShopItem } from '../lib/shop'
 import { Button } from '../components/ui/Button'
 import { GameCard } from '../components/ui/GameCard'
@@ -92,9 +93,15 @@ export function ImageGamePage() {
     // Geräte-Uhr). Kampagnen sind immer spielbar. Vergleich gegen autoritative Serverzeit.
     if (!isCampaign && imgRes.data?.unlocks_at && imgRes.data.event_id) {
       const { data: srv } = await supabase.rpc('server_now')
-      if (srv && new Date(imgRes.data.unlocks_at).getTime() > new Date(srv as string).getTime()) {
-        navigate(`/world/${worldId}/event/${imgRes.data.event_id}`, { replace: true })
-        return
+      if (srv) {
+        const unlockMs = new Date(imgRes.data.unlocks_at).getTime()
+        const nowMs = new Date(srv as string).getTime()
+        // Noch gesperrt ODER 24h-Spielfenster abgelaufen -> zurück zum Event. Der Server
+        // lehnt Versuche außerhalb des Fensters ohnehin ab (RLS); hier nur der Komfort-Redirect.
+        if (unlockMs > nowMs || nowMs >= unlockMs + IMAGE_PLAY_WINDOW_MS) {
+          navigate(`/world/${worldId}/event/${imgRes.data.event_id}`, { replace: true })
+          return
+        }
       }
     }
     setImage(imgRes.data)
