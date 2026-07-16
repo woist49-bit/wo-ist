@@ -50,9 +50,10 @@ input, textarea, select, [contenteditable="true"] {
 .safe-top     { padding-top: calc(env(safe-area-inset-top) + 0.75rem); }
 
 /* ===== EINZIGE Stelle im ganzen Code für das Tab-Bar-Padding unten =====
-   Genau eine Zeile: hebt die Tab-Bar-Icons über den Home-Indicator. Kein Margin,
-   kein zweites Padding, keine Berechnung. Auf Geräten ohne Home-Indicator = 0. */
-.safe-bottom  { padding-bottom: env(safe-area-inset-bottom); }
+   Hebt die Tab-Bar-Icons über den Home-Indicator. max() erzwingt einen Mindestabstand:
+   iOS meldet ~34px (Home-Indicator) und gewinnt; Android meldet für die Gesten-Leiste oft
+   0 -> dort greift der Boden von 0.75rem, sonst klebten die Icons am unteren Rand. */
+.safe-bottom  { padding-bottom: max(env(safe-area-inset-bottom), 0.75rem); }
 
 .safe-area-pb { padding-bottom: calc(env(safe-area-inset-bottom) + 1rem); }
 
