@@ -159,12 +159,10 @@ function ItemCard({ item, gems, owned, buying, onBuy }: {
             {owned > 0 && <span className="text-[11px] font-extrabold text-violet-700 bg-violet-100 rounded-full px-2 py-0.5 flex-shrink-0">×{owned}</span>}
           </div>
           <p className="text-xs text-slate-500 mt-0.5">{item.description}</p>
-          <div className="flex items-center justify-between gap-3 mt-3">
-            <span className="inline-flex items-center gap-1 font-extrabold text-emerald-600">
-              <Gem size={16} strokeWidth={2.5} /> {item.price}
-            </span>
-            <Button size="sm" variant="success" disabled={tooPoor || buying} loading={buying} onClick={onBuy}>
-              {tooPoor ? 'Zu wenig Gems' : 'Kaufen'}
+          <div className="mt-3">
+            {/* Kaufen = blau mit Preis (einheitlich mit Cosmetics) */}
+            <Button size="sm" variant="info" className="w-full" disabled={tooPoor || buying} loading={buying} onClick={onBuy}>
+              <span className="inline-flex items-center gap-1.5">{tooPoor ? 'Zu wenig' : 'Kaufen'} · <Gem size={14} strokeWidth={2.5} /> {item.price}</span>
             </Button>
           </div>
         </div>
@@ -208,8 +206,8 @@ function FrameCard({ frame, gems, owned, equipped, busy, avatarUrl, username, on
               <Button size="sm" variant="primary" className="w-full" loading={busy} onClick={() => onEquip(frame.id)}>Ausrüsten</Button>
             )
           ) : (
-            <Button size="sm" variant="success" className="w-full" disabled={tooPoor || busy} loading={busy} onClick={onBuy}>
-              {tooPoor ? 'Zu wenig' : <span className="inline-flex items-center gap-1"><Gem size={14} strokeWidth={2.5} /> {frame.price}</span>}
+            <Button size="sm" variant="info" className="w-full" disabled={tooPoor || busy} loading={busy} onClick={onBuy}>
+              <span className="inline-flex items-center gap-1">{tooPoor ? 'Zu wenig' : 'Kaufen'} · <Gem size={14} strokeWidth={2.5} /> {frame.price}</span>
             </Button>
           )}
         </div>
