@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { signIn, signUp, resendConfirmation, requestPasswordReset } from '../stores/auth'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
@@ -242,7 +242,9 @@ export function AuthPage() {
                   />
                   <span>
                     Ich akzeptiere die{' '}
-                    <Link to="/datenschutz" className="text-violet-600 font-semibold underline">Datenschutzerklärung</Link>
+                    {/* Neuer Tab, damit das Registrierungsformular nicht ausgehängt wird
+                        und die Eingaben (Name/E-Mail/Passwort/Häkchen) erhalten bleiben. */}
+                    <a href="/datenschutz" target="_blank" rel="noopener noreferrer" className="text-violet-600 font-semibold underline">Datenschutzerklärung</a>
                   </span>
                 </label>
               </>
