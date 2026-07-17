@@ -177,6 +177,10 @@ export function EventPage() {
                               <Search size={20} strokeWidth={2.5} />
                             </div>
                           )}
+                          {/* Gespielt + getroffen -> grüner Haken wie in der Kampagne */}
+                          {att?.is_correct && (
+                            <div className="absolute top-1 right-1 bg-green-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shadow">✓</div>
+                          )}
                         </>
                       )}
                     </div>
