@@ -27,7 +27,18 @@ export function DatenschutzPage() {
 
       <div className="flex-1 overflow-y-auto overscroll-none min-h-0 px-4 pb-8">
         <div className="max-w-lg mx-auto">
-          <GameCard className="text-slate-700 text-sm leading-relaxed">
+          <DatenschutzContent />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Reiner Inhalt (ohne Kopf/Layout) – wiederverwendet in der Registrierung als Overlay,
+// damit das Formular beim Öffnen nicht ausgehängt wird und die Eingaben erhalten bleiben.
+export function DatenschutzContent() {
+  return (
+    <GameCard className="text-slate-700 text-sm leading-relaxed">
             <p className="mb-4">
               Diese App ist eine private, geschlossene Anwendung, die ausschließlich für eine private
               Freundesgruppe betrieben wird. Es werden keine kommerziellen Zwecke verfolgt. Der Schutz deiner
@@ -110,10 +121,7 @@ export function DatenschutzPage() {
             </div>
 
             <p className="text-xs text-slate-400 mt-4">Stand: [27.06.2026]</p>
-          </GameCard>
-        </div>
-      </div>
-    </div>
+    </GameCard>
   )
 }
 

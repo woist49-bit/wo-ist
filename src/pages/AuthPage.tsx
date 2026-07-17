@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { X } from 'lucide-react'
 import { signIn, signUp, resendConfirmation, requestPasswordReset } from '../stores/auth'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { GameCard } from '../components/ui/GameCard'
+import { DatenschutzContent } from './DatenschutzPage'
 
 export function AuthPage() {
   const [mode, setMode] = useState<'login' | 'register'>('login')
@@ -24,6 +26,8 @@ export function AuthPage() {
   const [showReset, setShowReset] = useState(false)
   const [resetMsg, setResetMsg] = useState('')
   const [resetting, setResetting] = useState(false)
+  // Datenschutz als Overlay (statt Navigation), damit die Formulareingaben erhalten bleiben.
+  const [showPrivacy, setShowPrivacy] = useState(false)
   const navigate = useNavigate()
 
   function switchMode(m: 'login' | 'register') {
@@ -242,9 +246,8 @@ export function AuthPage() {
                   />
                   <span>
                     Ich akzeptiere die{' '}
-                    {/* Neuer Tab, damit das Registrierungsformular nicht ausgehängt wird
-                        und die Eingaben (Name/E-Mail/Passwort/Häkchen) erhalten bleiben. */}
-                    <a href="/datenschutz" target="_blank" rel="noopener noreferrer" className="text-violet-600 font-semibold underline">Datenschutzerklärung</a>
+                    {/* Overlay statt Navigation: hängt das Formular nicht aus -> Eingaben bleiben. */}
+                    <button type="button" onClick={() => setShowPrivacy(true)} className="text-violet-600 font-semibold underline">Datenschutzerklärung</button>
                   </span>
                 </label>
               </>
@@ -268,6 +271,27 @@ export function AuthPage() {
           </form>
         </GameCard>
       </div>
+
+      {/* Datenschutz-Overlay: liegt über dem Formular, ohne zu navigieren. Schließen -> Eingaben stehen noch. */}
+      {showPrivacy && (
+        <div className="fixed inset-0 z-[70] bg-gradient-to-b from-slate-600 via-slate-700 to-slate-800 flex flex-col">
+          <div className="px-3 pt-2 pb-2 safe-top flex items-center justify-between flex-shrink-0">
+            <h2 className="text-lg font-extrabold text-white pl-1">Datenschutzerklärung</h2>
+            <button
+              onClick={() => setShowPrivacy(false)}
+              aria-label="Schließen"
+              className="w-10 h-10 rounded-full bg-black/30 text-white flex items-center justify-center active:scale-95 transition-transform"
+            >
+              <X size={22} strokeWidth={2.5} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto overscroll-none min-h-0 px-4 pb-8">
+            <div className="max-w-lg mx-auto">
+              <DatenschutzContent />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
