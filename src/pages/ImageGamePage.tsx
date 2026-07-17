@@ -283,15 +283,30 @@ export function ImageGamePage() {
     startTimeRef.current = Date.now() // Bild ist schon geladen -> direkt weiter, begun bleibt true
   }
 
-  // Live-Event: Zurück vor dem Bestätigen -> Abbruch-Dialog. Kampagne / aufgelöst: direkt zurück.
+  // Zurück während der laufenden Runde -> Abbruch-Dialog: der Versuch gilt als verbraucht.
+  // Live-Event: immer (genau ein Versuch). Kampagne: nur solange Punkte auf dem Spiel stehen
+  // (noch kein Versuch auf diesem Bild) – sonst (bloße Wiederholung) einfach zurück. Sonst
+  // könnte man ein Bild öffnen, sich den Ort merken, zurück und beim 2. Mal Punkte kassieren.
   function handleBack() {
-    if (!isCampaign && placing) setShowAbort(true)
+    if (placing && (!isCampaign || !campaignAttempted)) setShowAbort(true)
     else navigate(-1)
   }
 
   async function abortConfirm() {
     if (!image || !user) { navigate(-1); return }
     setSubmitting(true)
+
+    if (isCampaign) {
+      // Kampagne: Verlassen zählt als Versuch. Fortschrittszeile (found=false, 0 Punkte) anlegen,
+      // damit ein erneutes Öffnen keine Punkte mehr gibt. Das Bild bleibt weiter spielbar.
+      await supabase.from('campaign_progress').upsert({
+        campaign_id: campaignId, image_id: image.id, user_id: user.id,
+        world_id: worldId, found: false, points: 0,
+      }, { onConflict: 'campaign_id,image_id,user_id' })
+      navigate(-1)
+      return
+    }
+
     const seconds = Math.round(effectiveElapsed((Date.now() - startTimeRef.current) / 1000, timerStacks, hasZeitlupe))
     await supabase.from('player_attempts').insert({
       image_id: image.id, user_id: user.id, click_x: tip?.x ?? 0, click_y: tip?.y ?? 0,
@@ -496,12 +511,16 @@ export function ImageGamePage() {
         </div>
       )}
 
-      {/* Abbruch-Dialog (nur Live-Event, Zurück vor dem Bestätigen) */}
+      {/* Abbruch-Dialog: Zurück vor dem Bestätigen zählt als Versuch (Live-Event + Kampagne) */}
       {showAbort && (
         <div className="absolute inset-0 z-40 bg-black/70 flex items-center justify-center p-6">
           <GameCard className="w-full max-w-sm">
             <p className="font-extrabold text-slate-800 text-lg mb-1">Wirklich abbrechen?</p>
-            <p className="text-slate-600 text-sm mb-4">Dein Versuch gilt als verbraucht und du erhältst 0 Punkte.</p>
+            <p className="text-slate-600 text-sm mb-4">
+              {isCampaign
+                ? 'Dein Versuch gilt als verbraucht. Du kannst das Bild weiter spielen, bekommst dafür aber keine Punkte mehr.'
+                : 'Dein Versuch gilt als verbraucht und du erhältst 0 Punkte.'}
+            </p>
             <div className="flex gap-3">
               <Button variant="secondary" className="flex-1" onClick={() => setShowAbort(false)}>Abbrechen</Button>
               <Button variant="danger" className="flex-1" loading={submitting} onClick={abortConfirm}>Bestätigen</Button>

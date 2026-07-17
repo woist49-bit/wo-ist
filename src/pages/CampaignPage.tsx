@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Lock, Search } from 'lucide-react'
+import { Lock, Search, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { GameCard } from '../components/ui/GameCard'
+import { Button } from '../components/ui/Button'
 import type { Campaign, EventImage } from '../types'
 
 export function CampaignPage() {
@@ -16,6 +17,7 @@ export function CampaignPage() {
   const [done, setDone] = useState<Map<string, number>>(new Map())
   const [isAdmin, setIsAdmin] = useState(false) // Admin dieser Welt -> verwaltet, spielt nicht
   const [loading, setLoading] = useState(true)
+  const [popupImg, setPopupImg] = useState<EventImage | null>(null) // Vorschau-Popup wie im Live-Event
 
   useEffect(() => { if (campaignId && user) load() }, [campaignId, user])
 
@@ -105,7 +107,7 @@ export function CampaignPage() {
               <button
                 key={img.id}
                 disabled={!tappable}
-                onClick={() => tappable && openImage(img)}
+                onClick={() => { if (!tappable) return; isAdmin ? openImage(img) : setPopupImg(img) }}
                 className={`w-full text-left ${tappable ? 'active:translate-y-[2px] transition-transform' : 'cursor-default'}`}
               >
                 <GameCard className={isAdmin ? '!border-sky-300' : !tappable ? 'opacity-50' : current ? '!border-violet-400' : ''}>
@@ -149,6 +151,68 @@ export function CampaignPage() {
           })}
         </div>
       )}
+
+      {/* Vorschau-Popup wie im Live-Event: unscharfes Bild, Status, „Spielen". Nur für Spieler
+          (Admins gehen direkt in die Verwaltung). Debuffs/Buffs gibt es in Kampagnen nicht. */}
+      {popupImg && (() => {
+        const idx = images.findIndex(i => i.id === popupImg.id)
+        const completed = done.has(popupImg.id)
+        const pts = done.get(popupImg.id) ?? 0
+        return (
+          <div className="fixed inset-0 z-[65] bg-black/60 flex items-end sm:items-center justify-center p-3 sm:p-6" onClick={() => setPopupImg(null)}>
+            <div
+              className="w-full max-w-sm bg-[#fdf6e3] border-[3px] border-[#e6d3a3] rounded-3xl shadow-[0_8px_0_#0000002e] flex flex-col animate-pop-in overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="relative flex-shrink-0">
+                <div className="relative h-28 bg-slate-300 overflow-hidden flex items-center justify-center">
+                  {/* Vor dem ersten Fund unscharf, danach scharf (schon gefunden). */}
+                  <img src={popupImg.image_url} alt="" className={`w-full h-full object-cover ${!completed ? 'blur-md scale-110' : ''}`} />
+                  {!completed && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-black/45 rounded-full px-3 py-1">
+                        <Search size={14} strokeWidth={2.5} /> Erst beim Spielen scharf
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => setPopupImg(null)}
+                  className="absolute top-2 right-2 w-9 h-9 rounded-full bg-black/40 text-white flex items-center justify-center active:scale-95 transition-transform"
+                  aria-label="Schließen"
+                >
+                  <X size={20} strokeWidth={2.5} />
+                </button>
+                <div className="absolute bottom-2 left-3">
+                  <span className="inline-block bg-black/50 text-white text-sm font-extrabold rounded-full px-3 py-1">Bild {idx + 1}</span>
+                </div>
+              </div>
+
+              <div className="px-4 py-3">
+                {completed ? (
+                  <p className="text-center text-green-600 font-extrabold text-lg">
+                    🎉 Gefunden!{pts > 0 ? <span className="text-slate-500 font-semibold text-sm"> · {pts} Punkte</span> : ''}
+                  </p>
+                ) : (
+                  <p className="text-sm text-slate-600">Finde die gesuchte Person auf diesem Bild.</p>
+                )}
+                {popupImg.description && <p className="text-sm text-slate-600 mt-2 whitespace-pre-line">{popupImg.description}</p>}
+              </div>
+
+              <div className="p-4 pt-1">
+                <Button
+                  variant={completed ? 'secondary' : 'success'}
+                  size="lg"
+                  className="w-full"
+                  onClick={() => { const t = popupImg; setPopupImg(null); openImage(t) }}
+                >
+                  {completed ? 'Nochmal spielen' : '▶ Spielen'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
