@@ -190,8 +190,9 @@ export function WorldsPage() {
           <Button onClick={() => { setShowCreate(true); setShowJoin(false); setError('') }} variant="primary" className="flex-1">
             + Erstellen
           </Button>
-          {/* Beitreten öffnet eine Unterseite -> derselbe Button führt auch wieder zurück */}
-          <Button onClick={() => { setShowJoin(!showJoin); setShowCreate(false); setError('') }} variant="info" className="flex-1">
+          {/* Beitreten öffnet eine Unterseite -> derselbe Button führt auch wieder zurück.
+              Farbe wechselt mit: blau = Beitreten, grau = Zurück (klare Unterscheidung). */}
+          <Button onClick={() => { setShowJoin(!showJoin); setShowCreate(false); setError('') }} variant={showJoin ? 'secondary' : 'info'} className="flex-1">
             {showJoin ? 'Zurück' : 'Beitreten'}
           </Button>
         </div>

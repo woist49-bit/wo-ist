@@ -134,7 +134,16 @@ export async function setUsername(name: string): Promise<{ error: string | null 
 }
 
 export async function signOut() {
-  await supabase.auth.signOut()
+  // scope: 'local' loggt nur lokal aus (löscht die gespeicherte Session) OHNE den
+  // Server-Logout. Der globale Logout macht einen Server-Roundtrip, der bei
+  // gelöschtem/ungültigem Account fehlschlägt und die Session sonst in der PWA
+  // hängen lässt -> man käme nicht mehr raus und damit auch nicht neu rein.
+  // try/catch: das Ausloggen darf NIE an einem Server-/Netzfehler scheitern.
+  try {
+    await supabase.auth.signOut({ scope: 'local' })
+  } catch {
+    // bewusst ignoriert – lokal gilt die Session als beendet
+  }
 }
 
 export async function getProfile(userId: string): Promise<Profile | null> {
