@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
+import { signOut } from './auth'
 import type { Profile } from '../types'
 
 interface AuthValue {
@@ -21,7 +22,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   async function loadProfile(userId: string) {
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
+    // Session vorhanden, aber KEIN Profil -> der Account wurde serverseitig gelöscht.
+    // Ohne das hier hinge die App im Zustand "eingeloggt ohne Profil" fest und man käme
+    // weder raus noch neu rein. maybeSingle liefert bei fehlender Zeile data=null OHNE
+    // Fehler; ein echter Netzfehler setzt dagegen error -> dann NICHT ausloggen (nur
+    // transiente Störung), sonst würde ein Aussetzer alle rauswerfen.
+    if (!error && data === null) {
+      await signOut()                 // scope: 'local' -> löst SIGNED_OUT aus
+      setUser(null); setProfile(null); setLoading(false)
+      return
+    }
     setProfile(data)
     setLoading(false)
   }
