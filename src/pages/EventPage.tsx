@@ -106,6 +106,10 @@ export function EventPage() {
 
   return (
     <div className="p-4 max-w-lg mx-auto pt-5 pb-8">
+      {/* Modus-Identität: rotes Live-Puls-Pill – klar abgegrenzt vom violetten Kampagnen-Menü. */}
+      <div className="inline-flex items-center gap-2 bg-rose-500 text-white font-extrabold text-sm rounded-full px-4 py-1.5 mb-3 shadow-[0_3px_0_#9f1239,inset_0_1px_0_#ffffff80]">
+        <span className="w-2 h-2 rounded-full bg-white animate-pulse" /> Live-Event
+      </div>
       <h1 className="text-2xl font-extrabold text-white mb-1">{event.title}</h1>
       <p className="text-white/50 text-sm mb-3">{formatDateRange(event.starts_at, event.ends_at)}</p>
       {isAdmin ? (
@@ -163,7 +167,7 @@ export function EventPage() {
                   : setPopupImg(img)}
                 className="w-full text-left active:translate-y-[2px] transition-transform"
               >
-                <GameCard className={isAdmin ? '!border-sky-300' : played ? '' : locked ? '' : expired ? 'opacity-70' : '!border-violet-400'}>
+                <GameCard className={isAdmin ? '!border-sky-300' : played ? '' : locked ? '' : expired ? 'opacity-70' : '!border-rose-400'}>
                   <div className="flex items-center gap-4">
                     <div className="relative w-20 h-14 rounded-xl overflow-hidden bg-slate-300 flex-shrink-0 flex items-center justify-center">
                       {locked ? (
@@ -187,7 +191,7 @@ export function EventPage() {
                     <div className="flex-1 min-w-0">
                       <p className="font-extrabold text-slate-800">Bild {idx + 1}</p>
                       {locked ? (
-                        <p className="text-xs font-bold mt-0.5 text-violet-600">Freigeschaltet in {formatCountdown(unlockMs - now)}</p>
+                        <p className="text-xs font-bold mt-0.5 text-rose-600">Freigeschaltet in {formatCountdown(unlockMs - now)}</p>
                       ) : (
                         <>
                           {img.description && <p className="text-xs text-slate-600 mt-0.5 line-clamp-2">{img.description}</p>}
@@ -217,7 +221,7 @@ export function EventPage() {
                       ) : expired ? (
                         <span className="text-slate-400">Abgelaufen</span>
                       ) : (
-                        <span className="text-violet-600">Spielen →</span>
+                        <span className="text-rose-600">Spielen →</span>
                       )}
                     </div>
                   </div>
@@ -247,7 +251,7 @@ export function EventPage() {
           <p className="text-center text-sm font-semibold text-slate-500">Dieses Event ist beendet.</p>
         ) : nextSlot ? (
           <div className="flex items-center gap-3">
-            <Clock size={20} strokeWidth={2.5} className="text-violet-500 flex-shrink-0" />
+            <Clock size={20} strokeWidth={2.5} className="text-rose-500 flex-shrink-0" />
             <p className="text-sm font-semibold text-slate-700">
               Nächstes Bild {relativeDay(new Date(nextSlot), new Date(now))} um {timeOf(nextSlot)} Uhr
               <span className="text-slate-400"> · in {formatCountdown(nextSlot - now)}</span>
@@ -255,7 +259,7 @@ export function EventPage() {
           </div>
         ) : (
           <div className="flex items-center gap-3">
-            <Clock size={20} strokeWidth={2.5} className="text-violet-500 flex-shrink-0" />
+            <Clock size={20} strokeWidth={2.5} className="text-rose-500 flex-shrink-0" />
             <p className="text-sm font-semibold text-slate-700">
               Letztes Bild ist da – Event endet in {formatCountdown(eventEndMs - now)}
             </p>

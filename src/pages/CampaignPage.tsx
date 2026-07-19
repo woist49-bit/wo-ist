@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Lock, Search, X } from 'lucide-react'
+import { Lock, Search, X, Globe } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { GameCard } from '../components/ui/GameCard'
@@ -74,6 +74,11 @@ export function CampaignPage() {
 
   return (
     <div className="p-4 max-w-lg mx-auto pt-4 pb-8">
+      {/* Modus-Identität: violettes Globus-Pill – thematisch (Kampagnen liegen auf dem 3D-Globus)
+          und klar abgegrenzt vom roten Live-Event-Menü. */}
+      <div className="inline-flex items-center gap-2 bg-violet-500 text-white font-extrabold text-sm rounded-full px-4 py-1.5 mb-3 shadow-[0_3px_0_#5b21b6,inset_0_1px_0_#ffffff80]">
+        <Globe size={15} strokeWidth={2.75} /> Kampagne
+      </div>
       <div className="flex items-center gap-2 mb-1">
         <h1 className="text-2xl font-extrabold text-white">{campaign.title}</h1>
         {campaign.is_legacy && <span className="text-xs font-bold text-amber-300 border border-amber-300/50 rounded-full px-2 py-0.5">Legacy</span>}
