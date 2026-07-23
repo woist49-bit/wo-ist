@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Search, Clock, Lock } from 'lucide-react'
+import { Search, Clock, Lock, Info } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useServerNow } from '../hooks/useServerNow'
@@ -106,11 +106,11 @@ export function EventPage() {
 
   return (
     <div className="p-4 max-w-lg mx-auto pt-5 pb-8">
-      {/* Modus-Identität: rotes Live-Puls-Pill – klar abgegrenzt vom violetten Kampagnen-Menü. */}
-      <div className="inline-flex items-center gap-2 bg-rose-500 text-white font-extrabold text-sm rounded-full px-4 py-1.5 mb-3 shadow-[0_3px_0_#9f1239,inset_0_1px_0_#ffffff80]">
-        <span className="w-2 h-2 rounded-full bg-white animate-pulse" /> Live-Event
+      {/* Modus-Identität: große rote Puls-Pille MIT dem Event-Titel (Farbe + Puls = Live-Event). */}
+      <div className="inline-flex items-center gap-2.5 bg-rose-500 text-white rounded-full px-5 py-2.5 mb-2 max-w-full shadow-[0_4px_0_#9f1239,inset_0_1px_0_#ffffff80]">
+        <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse flex-shrink-0" />
+        <span className="text-xl font-extrabold leading-tight break-words">{event.title}</span>
       </div>
-      <h1 className="text-2xl font-extrabold text-white mb-1">{event.title}</h1>
       <p className="text-white/50 text-sm mb-3">{formatDateRange(event.starts_at, event.ends_at)}</p>
       {isAdmin ? (
         <div className="inline-block bg-sky-500 text-white font-extrabold text-sm rounded-full px-4 py-1.5 mb-5 shadow-[0_3px_0_#0369a1,inset_0_1px_0_#ffffff80]">
@@ -194,7 +194,12 @@ export function EventPage() {
                         <p className="text-xs font-bold mt-0.5 text-rose-600">Freigeschaltet in {formatCountdown(unlockMs - now)}</p>
                       ) : (
                         <>
-                          {img.description && <p className="text-xs text-slate-600 mt-0.5 line-clamp-2">{img.description}</p>}
+                          {img.description && (
+                            <div className="flex items-start gap-1.5 mt-1">
+                              <Info size={13} strokeWidth={2.75} className="text-rose-500 flex-shrink-0 mt-[3px]" />
+                              <p className="text-[13px] text-slate-700 font-medium leading-snug line-clamp-2">{img.description}</p>
+                            </div>
+                          )}
                           <p className="text-xs text-slate-500 mt-0.5">Freigeschaltet: {formatDate(img.unlocks_at)}</p>
                           {!played && (
                             <p className={`text-xs font-bold mt-0.5 ${remainColor}`}>

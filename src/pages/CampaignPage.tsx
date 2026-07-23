@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Lock, Search, X, Globe } from 'lucide-react'
+import { Lock, Search, X, Globe, Info } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { GameCard } from '../components/ui/GameCard'
@@ -74,13 +74,12 @@ export function CampaignPage() {
 
   return (
     <div className="p-4 max-w-lg mx-auto pt-4 pb-8">
-      {/* Modus-Identität: violettes Globus-Pill – thematisch (Kampagnen liegen auf dem 3D-Globus)
-          und klar abgegrenzt vom roten Live-Event-Menü. */}
-      <div className="inline-flex items-center gap-2 bg-violet-500 text-white font-extrabold text-sm rounded-full px-4 py-1.5 mb-3 shadow-[0_3px_0_#5b21b6,inset_0_1px_0_#ffffff80]">
-        <Globe size={15} strokeWidth={2.75} /> Kampagne
-      </div>
-      <div className="flex items-center gap-2 mb-1">
-        <h1 className="text-2xl font-extrabold text-white">{campaign.title}</h1>
+      {/* Modus-Identität: große violette Globus-Pille MIT dem Kampagnen-Titel (Farbe + Globus = Kampagne). */}
+      <div className="flex flex-wrap items-center gap-2 mb-2">
+        <div className="inline-flex items-center gap-2.5 bg-violet-500 text-white rounded-full px-5 py-2.5 max-w-full shadow-[0_4px_0_#5b21b6,inset_0_1px_0_#ffffff80]">
+          <Globe size={20} strokeWidth={2.75} className="flex-shrink-0" />
+          <span className="text-xl font-extrabold leading-tight break-words">{campaign.title}</span>
+        </div>
         {campaign.is_legacy && <span className="text-xs font-bold text-amber-300 border border-amber-300/50 rounded-full px-2 py-0.5">Legacy</span>}
       </div>
       {isAdmin
@@ -136,7 +135,12 @@ export function CampaignPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-extrabold text-slate-800">Bild {idx + 1}</p>
-                      {tappable && img.description && <p className="text-xs text-slate-600 mt-0.5 line-clamp-2">{img.description}</p>}
+                      {tappable && img.description && (
+                        <div className="flex items-start gap-1.5 mt-1">
+                          <Info size={13} strokeWidth={2.75} className="text-violet-500 flex-shrink-0 mt-[3px]" />
+                          <p className="text-[13px] text-slate-700 font-medium leading-snug line-clamp-2">{img.description}</p>
+                        </div>
+                      )}
                       <p className="text-xs text-slate-500 mt-0.5">
                         {isAdmin ? 'Admin-Ansicht'
                           : completed ? (pts > 0 ? `✓ Geschafft · ${pts} Punkte` : '✓ Geschafft')
