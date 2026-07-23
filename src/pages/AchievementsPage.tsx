@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { ACHIEVEMENTS } from '../lib/achievements'
 import { GameCard } from '../components/ui/GameCard'
+import { LiveOnlyChip } from '../components/ui/LiveOnlyChip'
 import type { PlayerAchievement } from '../types'
 
 // Auf dem beigen GameCard lesbare Tier-Farben (die globalen TIER_COLORS sind für dunklen Grund).
@@ -53,6 +54,7 @@ export function AchievementsPage() {
                       <div className="flex-1 min-w-0">
                         <p className="font-extrabold text-slate-800">{a.name}</p>
                         <p className="text-xs text-slate-500 mt-0.5">{a.description}</p>
+                        {a.liveOnly && <div className="mt-1.5"><LiveOnlyChip /></div>}
                       </div>
                       <p className={`text-sm font-extrabold flex-shrink-0 ${unlocked ? TIER_TEXT[tier] : 'text-slate-400'}`}>+{a.xp_reward} XP</p>
                     </div>

@@ -14,6 +14,7 @@ import { Button } from '../components/ui/Button'
 import { GameCard } from '../components/ui/GameCard'
 import { IconButton } from '../components/ui/IconButton'
 import { PushToggle } from '../components/PushToggle'
+import { LiveOnlyChip } from '../components/ui/LiveOnlyChip'
 import type { Profile } from '../types'
 
 export function ProfilePage() {
@@ -224,6 +225,7 @@ export function ProfilePage() {
                       <div className="flex-1 min-w-0">
                         <p className="font-extrabold text-slate-800">{a.name}</p>
                         <p className="text-xs text-slate-500 mt-0.5">{a.description}</p>
+                        {a.liveOnly && <div className="mt-1.5"><LiveOnlyChip /></div>}
                       </div>
                       <p className="text-sm font-extrabold text-slate-400 flex-shrink-0">+{a.xp_reward}</p>
                     </div>

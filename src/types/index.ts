@@ -92,6 +92,7 @@ export interface Achievement {
   tier: 'bronze' | 'silver' | 'gold'
   xp_reward: number
   global?: boolean // nicht an eine Spielwelt gebunden (z. B. Tutorial) -> nicht in Welt-Erfolgen listen
+  liveOnly?: boolean // nur über Live-Events erspielbar (nicht in Kampagnen) -> Karten-Kennzeichnung
 }
 
 // Erfolge gelten global pro Spieler – bewusst ohne Welt-Bezug.
