@@ -22,7 +22,7 @@ export function PushToggle({ userId }: { userId: string }) {
 
   if (!supported) {
     return (
-      <p className="mt-6 text-xs text-white/40 text-center leading-relaxed">
+      <p className="text-xs text-white/40 text-center leading-relaxed">
         Benachrichtigungen werden auf diesem Gerät nicht unterstützt. Auf dem iPhone gehen sie nur,
         wenn du die App über „Zum Home-Bildschirm" installierst.
       </p>
@@ -82,7 +82,7 @@ export function PushToggle({ userId }: { userId: string }) {
   }
 
   return (
-    <div className="mt-6 flex flex-col gap-3">
+    <div className="flex flex-col gap-3">
       <Toggle
         checked={enabled}
         onChange={toggle}

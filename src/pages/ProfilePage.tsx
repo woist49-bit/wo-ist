@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, type ChangeEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, Camera, Pencil } from 'lucide-react'
+import { ChevronLeft, Camera, Pencil, Settings, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useToast } from '../stores/toast'
@@ -40,6 +40,8 @@ export function ProfilePage() {
   const [newName, setNewName] = useState('')
   const [renaming, setRenaming] = useState(false)
   const [renameError, setRenameError] = useState('')
+  // Einstellungen (Zahnrad oben rechts) – aktuell Benachrichtigungen + Konto, später erweiterbar.
+  const [showSettings, setShowSettings] = useState(false)
 
   async function saveUsername() {
     setRenaming(true); setRenameError('')
@@ -131,8 +133,11 @@ export function ProfilePage() {
       {/* Fixer Hero-Bereich */}
       <div className="flex-shrink-0 bg-gradient-to-b from-sky-600 to-blue-800 rounded-b-[2rem] shadow-[0_8px_24px_rgba(0,0,0,0.28)]">
         <div className="max-w-lg mx-auto px-4 pb-4">
-          <div className="pt-2 pb-1 safe-top">
+          <div className="pt-2 pb-1 safe-top flex items-center justify-between">
             <IconButton variant="grey" onClick={() => navigate(-1)} aria-label="Zurück"><ChevronLeft size={24} strokeWidth={2.5} /></IconButton>
+            {isOwn && (
+              <IconButton variant="grey" onClick={() => setShowSettings(true)} aria-label="Einstellungen"><Settings size={22} strokeWidth={2.5} /></IconButton>
+            )}
           </div>
 
           <div className="flex items-center gap-4 mb-4 mt-1">
@@ -244,17 +249,6 @@ export function ProfilePage() {
             </div>
           )}
 
-          {isOwn && (
-            <>
-              <PushToggle userId={user!.id} />
-              <Button variant="danger" className="w-full mt-6" onClick={async () => { await signOut(); navigate('/') }}>
-                Abmelden
-              </Button>
-              <button onClick={() => navigate('/datenschutz')} className="block mx-auto mt-5 text-white/30 hover:text-white/50 text-xs transition-colors">
-                Datenschutzerklärung
-              </button>
-            </>
-          )}
         </div>
       </div>
 
@@ -288,6 +282,35 @@ export function ProfilePage() {
               </Button>
             </div>
           </GameCard>
+        </div>
+      )}
+
+      {/* Einstellungen-Panel (Zahnrad) – ausbaubar für weitere Optionen. */}
+      {showSettings && isOwn && (
+        <div className="fixed inset-0 z-[60] bg-gradient-to-b from-slate-700 via-slate-800 to-slate-900 flex flex-col animate-slide-in-right">
+          <div className="px-4 pt-2 pb-2 safe-top flex-shrink-0">
+            <div className="max-w-lg mx-auto w-full flex items-center justify-between">
+              <h2 className="text-xl font-extrabold text-white">Einstellungen</h2>
+              <IconButton variant="grey" onClick={() => setShowSettings(false)} aria-label="Schließen"><X size={22} strokeWidth={2.5} /></IconButton>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto overscroll-none min-h-0 px-4 pb-8">
+            <div className="max-w-lg mx-auto flex flex-col gap-7 pt-3">
+              <div>
+                <p className="text-white/45 text-xs font-bold uppercase tracking-wide mb-2 px-1">Benachrichtigungen</p>
+                <PushToggle userId={user!.id} />
+              </div>
+              <div>
+                <p className="text-white/45 text-xs font-bold uppercase tracking-wide mb-2 px-1">Konto</p>
+                <Button variant="danger" className="w-full" onClick={async () => { await signOut(); navigate('/') }}>
+                  Abmelden
+                </Button>
+                <button onClick={() => { setShowSettings(false); navigate('/datenschutz') }} className="block mx-auto mt-5 text-white/40 hover:text-white/60 text-xs transition-colors">
+                  Datenschutzerklärung
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
