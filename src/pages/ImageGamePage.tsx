@@ -548,14 +548,14 @@ export function ImageGamePage() {
             {isCampaign ? (
               <>
                 {/* Links: immer zurück ins Kampagnen-Menü */}
-                <Button variant="secondary" className="flex-1" onClick={() => navigate(`/world/${worldId}/campaign/${campaignId}`)}>Zurück</Button>
+                <Button variant="secondary" className="flex-1" onClick={() => navigate(-1)}>Zurück</Button>
                 {/* Rechts: je nach Ergebnis */}
                 {!lastHit ? (
                   <Button className="flex-1" onClick={playAgain}>Nochmal</Button>
                 ) : nextImageId ? (
                   <Button className="flex-1" onClick={() => navigate(`/world/${worldId}/campaign/${campaignId}/image/${nextImageId}`, { replace: true })}>Weiter</Button>
                 ) : (
-                  <Button variant="success" className="flex-1" onClick={() => navigate(`/world/${worldId}/campaign/${campaignId}`)}>Fertig</Button>
+                  <Button variant="success" className="flex-1" onClick={() => navigate(-1)}>Fertig</Button>
                 )}
               </>
             ) : (
