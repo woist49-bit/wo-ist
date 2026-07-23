@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Toggle } from './ui/Toggle'
+import { Button } from './ui/Button'
+import { supabase } from '../lib/supabase'
 import { useToast } from '../stores/toast'
 import { pushSupported, pushConfigured, isPushEnabled, enablePush, disablePush } from '../lib/push'
 
@@ -11,6 +13,7 @@ export function PushToggle({ userId }: { userId: string }) {
   const [enabled, setEnabled] = useState(false)
   const [ready, setReady] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [testing, setTesting] = useState(false)
 
   useEffect(() => {
     if (!supported) { setReady(true); return }
@@ -50,8 +53,24 @@ export function PushToggle({ userId }: { userId: string }) {
     }
   }
 
+  // Selbst-Test: ruft die Edge Function 'send-push' auf. Das User-JWT hängt invoke automatisch
+  // an -> die Function schickt den Push nur an die eigenen Geräte.
+  async function sendTest() {
+    setTesting(true)
+    const { data, error } = await supabase.functions.invoke('send-push', {
+      body: { title: 'Wo ist...?', body: 'Test-Benachrichtigung – es funktioniert! 🎉', url: '/' },
+    })
+    setTesting(false)
+    if (error) { addToast('Test fehlgeschlagen. Ist die Edge Function „send-push" deployed?', 'error', 8000); return }
+    const sent = (data as { sent?: number } | null)?.sent ?? 0
+    addToast(
+      sent > 0 ? 'Test verschickt – gleich sollte die Benachrichtigung kommen.' : 'Kein Abo gefunden.',
+      sent > 0 ? 'success' : 'error', 6000,
+    )
+  }
+
   return (
-    <div className="mt-6">
+    <div className="mt-6 flex flex-col gap-3">
       <Toggle
         checked={enabled}
         onChange={toggle}
@@ -59,6 +78,11 @@ export function PushToggle({ userId }: { userId: string }) {
         label="Benachrichtigungen"
         hint="Hinweis bei neuen Bildern, neuen Live-Events und Ergebnissen."
       />
+      {enabled && (
+        <Button variant="secondary" size="sm" className="w-full" loading={testing} onClick={sendTest}>
+          Test-Benachrichtigung senden
+        </Button>
+      )}
     </div>
   )
 }
