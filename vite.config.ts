@@ -32,6 +32,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,wasm}'],
+        // Eigener Push-Handler (push/notificationclick) wird in den generierten SW eingebunden.
+        importScripts: ['push-sw.js'],
         // Der (lazy geladene) Globus-Chunk mit three.js ist groß – Precache-Limit anheben,
         // sonst bricht der Build ab. Wird nur bei Bedarf nachgeladen (Code-Splitting).
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,

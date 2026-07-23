@@ -13,6 +13,7 @@ import { MedalBadge } from '../components/ui/MedalBadge'
 import { Button } from '../components/ui/Button'
 import { GameCard } from '../components/ui/GameCard'
 import { IconButton } from '../components/ui/IconButton'
+import { PushToggle } from '../components/PushToggle'
 import type { Profile } from '../types'
 
 export function ProfilePage() {
@@ -245,6 +246,7 @@ export function ProfilePage() {
 
           {isOwn && (
             <>
+              <PushToggle userId={user!.id} />
               <Button variant="danger" className="w-full mt-6" onClick={async () => { await signOut(); navigate('/') }}>
                 Abmelden
               </Button>
