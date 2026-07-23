@@ -206,8 +206,9 @@ function FrameCard({ frame, gems, owned, equipped, busy, avatarUrl, username, on
               <Button size="sm" variant="primary" className="w-full" loading={busy} onClick={() => onEquip(frame.id)}>Ausrüsten</Button>
             )
           ) : (
-            <Button size="sm" variant="info" className="w-full" disabled={tooPoor || busy} loading={busy} onClick={onBuy}>
-              <span className="inline-flex items-center gap-1">{tooPoor ? 'Zu wenig' : 'Kaufen'} · <Gem size={14} strokeWidth={2.5} /> {frame.price}</span>
+            // Schmale 2-Spalten-Karte: kompakt + umbruchsicher, sonst bricht "Zu wenig · 550" um.
+            <Button size="sm" variant="info" className="w-full !px-2" disabled={tooPoor || busy} loading={busy} onClick={onBuy}>
+              <span className="inline-flex items-center justify-center gap-1 whitespace-nowrap text-[13px]">{tooPoor ? 'Zu wenig' : 'Kaufen'} <Gem size={13} strokeWidth={2.5} /> {frame.price}</span>
             </Button>
           )}
         </div>
