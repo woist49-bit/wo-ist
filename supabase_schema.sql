@@ -1031,8 +1031,11 @@ begin
   if v_first and not exists (
     select 1 from player_achievements where user_id = p_user_id and achievement_key = 'tutorial_master'
   ) then
-    insert into player_achievements (user_id, world_id, achievement_key)
-    values (p_user_id, null, 'tutorial_master');
+    -- Kein world_id mehr (Spalte wurde entfernt) – sonst scheitert der Insert und rollt
+    -- die ganze Tutorial-Abschluss-Transaktion zurück (Flag + Erfolg).
+    insert into player_achievements (user_id, achievement_key)
+    values (p_user_id, 'tutorial_master')
+    on conflict (user_id, achievement_key) do nothing;
     perform add_xp(p_user_id, 150, null);
     perform award_gems(p_user_id, 10, 'achievement', 'tutorial_master'); -- Bronze
     return true;
