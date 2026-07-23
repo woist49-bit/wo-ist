@@ -23,7 +23,11 @@ returns void language plpgsql security definer set search_path = public as $$
 declare
   r record;
   fn_url text := 'https://ywslhfxdqvlzpbmfpwvd.supabase.co/functions/v1/send-push';
-  secret text := '__PUSH_SEND_SECRET__';   -- <-- im SQL-Editor durch das echte Secret ersetzen
+  secret text := '__PUSH_SEND_SECRET__';       -- <-- im SQL-Editor durch das echte PUSH_SEND_SECRET ersetzen
+  -- Öffentlicher anon-Key: nötig als Authorization-Header, sonst blockt das Supabase-Gateway
+  -- den Aufruf mit 401 "Missing authorization header", bevor die Function läuft. Nicht geheim
+  -- (steckt ohnehin im Client-Bundle). Zu finden unter Project Settings -> API -> anon public.
+  anon text := '__SUPABASE_ANON_KEY__';         -- <-- im SQL-Editor durch den anon-Key ersetzen
 begin
   -- Fällige Events serverseitig beenden, damit "Event beendet" auch dann kommt, wenn niemand
   -- die App öffnet (finish_due_events lief sonst nur beim Laden einer Spielwelt).
@@ -38,7 +42,7 @@ begin
     insert into push_log(kind, ref_id) values ('image', r.id);
     perform net.http_post(
       url := fn_url,
-      headers := jsonb_build_object('Content-Type', 'application/json', 'x-push-secret', secret),
+      headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || anon, 'x-push-secret', secret),
       body := jsonb_build_object('world_id', r.world_id,
         'title', 'Neues Bild ist da! 🔍', 'body', 'Im Live-Event wurde ein neues Bild freigeschaltet.',
         'url', '/', 'tag', 'img-' || r.world_id)
@@ -54,7 +58,7 @@ begin
     insert into push_log(kind, ref_id) values ('event_new', r.id);
     perform net.http_post(
       url := fn_url,
-      headers := jsonb_build_object('Content-Type', 'application/json', 'x-push-secret', secret),
+      headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || anon, 'x-push-secret', secret),
       body := jsonb_build_object('world_id', r.world_id,
         'title', 'Neues Live-Event! 🔴', 'body', coalesce(r.title, 'Ein neues Live-Event') || ' ist gestartet.',
         'url', '/', 'tag', 'ev-' || r.id)
@@ -70,7 +74,7 @@ begin
     insert into push_log(kind, ref_id) values ('event_done', r.id);
     perform net.http_post(
       url := fn_url,
-      headers := jsonb_build_object('Content-Type', 'application/json', 'x-push-secret', secret),
+      headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || anon, 'x-push-secret', secret),
       body := jsonb_build_object('world_id', r.world_id,
         'title', 'Event beendet! 🏁', 'body', coalesce(r.title, 'Ein Live-Event') || ' ist vorbei – sieh dir das Ergebnis an.',
         'url', '/', 'tag', 'done-' || r.id)
