@@ -153,6 +153,7 @@ export function WorldsPage() {
       return
     }
     setJoinTarget(null)
+    setShowJoin(false)   // direkt zurück zur Startansicht „Deine Spielwelten" – kein extra Zurück-Tippen
     // Welt wandert aus der öffentlichen Liste zu „Deine Spielwelten"
     await Promise.all([loadWorlds(), loadPublic()])
   }
@@ -229,13 +230,13 @@ export function WorldsPage() {
             <GameCard className="mb-4">
               <form onSubmit={joinWorld} className="flex flex-col gap-3">
                 <h2 className="font-extrabold text-slate-800">Spielwelt beitreten</h2>
+                {/* Kein autoFocus: Tastatur soll erst aufgehen, wenn man das Feld antippt. */}
                 <Input
                   tone="light"
                   placeholder="Einladungscode (z. B. AB12CD)"
                   value={joinCode}
                   onChange={e => setJoinCode(e.target.value)}
                   autoCapitalize="characters"
-                  autoFocus
                 />
                 {error && <p className="text-red-600 text-sm font-medium">{error}</p>}
                 <Button type="submit" variant="success" loading={loading} className="w-full">Beitreten</Button>
