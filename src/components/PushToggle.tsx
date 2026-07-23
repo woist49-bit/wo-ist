@@ -61,7 +61,19 @@ export function PushToggle({ userId }: { userId: string }) {
       body: { title: 'Wo ist...?', body: 'Test-Benachrichtigung – es funktioniert! 🎉', url: '/' },
     })
     setTesting(false)
-    if (error) { addToast('Test fehlgeschlagen. Ist die Edge Function „send-push" deployed?', 'error', 8000); return }
+    if (error) {
+      // Die echte Fehlermeldung der Function herausziehen (FunctionsHttpError -> context = Response).
+      let detail = ''
+      const ctx = (error as { context?: unknown }).context
+      if (ctx instanceof Response) {
+        try { detail = ((await ctx.json()) as { error?: string })?.error ?? '' } catch { /* kein JSON-Body */ }
+      }
+      addToast(
+        detail ? `Test fehlgeschlagen: ${detail}` : 'Test fehlgeschlagen – ist die Edge Function „send-push" deployed?',
+        'error', 9000,
+      )
+      return
+    }
     const sent = (data as { sent?: number } | null)?.sent ?? 0
     addToast(
       sent > 0 ? 'Test verschickt – gleich sollte die Benachrichtigung kommen.' : 'Kein Abo gefunden.',

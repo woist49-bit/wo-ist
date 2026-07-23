@@ -16,7 +16,16 @@ const VAPID_PRIVATE = Deno.env.get('VAPID_PRIVATE_KEY') ?? ''
 const VAPID_SUBJECT = Deno.env.get('VAPID_SUBJECT') ?? 'mailto:admin@example.com'
 const SEND_SECRET = Deno.env.get('PUSH_SEND_SECRET') ?? ''
 
-webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE)
+// VAPID erst im Handler setzen (nicht beim Modul-Load) – sonst stürzt die ganze Function
+// beim Booten ab, falls Secrets fehlen, und man sieht nur einen unklaren Fehler.
+let vapidReady = false
+function ensureVapid(): boolean {
+  if (vapidReady) return true
+  if (!VAPID_PUBLIC || !VAPID_PRIVATE) return false
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE)
+  vapidReady = true
+  return true
+}
 
 const admin = createClient(
   Deno.env.get('SUPABASE_URL') ?? '',
@@ -63,6 +72,10 @@ Deno.serve(async (req) => {
 
     userIds = [...new Set(userIds)]
     if (userIds.length === 0) return json({ sent: 0 })
+
+    if (!ensureVapid()) {
+      return json({ error: 'VAPID_KEYS_MISSING: Secrets VAPID_PUBLIC_KEY und VAPID_PRIVATE_KEY in Supabase setzen.' }, 500)
+    }
 
     const { data: subs } = await admin.from('push_subscriptions').select('*').in('user_id', userIds)
     const payload = JSON.stringify({ title, body: text, url, tag })
