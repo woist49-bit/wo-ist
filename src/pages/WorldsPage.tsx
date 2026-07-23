@@ -1,6 +1,9 @@
 import { useState, useEffect, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users, Layers, GraduationCap, Check, Crown, ThumbsUp, Globe } from 'lucide-react'
+import { Users, Layers, GraduationCap, Check, Crown, ThumbsUp, Globe, GripVertical } from 'lucide-react'
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { Button } from '../components/ui/Button'
@@ -32,6 +35,35 @@ export function WorldsPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  // Drag & Drop zum Umsortieren. Kleine Aktivierungs-Distanz, damit Tippen (Welt öffnen) und
+  // Scrollen weiter funktionieren – gezogen wird nur über den Griff.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+  const orderKey = user ? `wo-ist:world-order:${user.id}` : null
+
+  // Selbst gewählte Reihenfolge NUR auf diesem Gerät (localStorage). Unbekannte/neue Welten ans Ende.
+  function applySavedOrder(ws: World[]): World[] {
+    if (!orderKey) return ws
+    try {
+      const saved = JSON.parse(localStorage.getItem(orderKey) || '[]') as string[]
+      if (!saved.length) return ws
+      const rank = new Map(saved.map((id, i) => [id, i]))
+      return [...ws].sort((a, b) => (rank.get(a.id) ?? 1e9) - (rank.get(b.id) ?? 1e9))
+    } catch { return ws }
+  }
+  function saveOrder(ws: World[]) {
+    if (!orderKey) return
+    try { localStorage.setItem(orderKey, JSON.stringify(ws.map(w => w.id))) } catch { /* ignore */ }
+  }
+  function onWorldDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    setWorlds(prev => {
+      const next = arrayMove(prev, prev.findIndex(w => w.id === active.id), prev.findIndex(w => w.id === over.id))
+      saveOrder(next)
+      return next
+    })
+  }
+
   useEffect(() => { if (user) loadWorlds() }, [user])
   // Öffentliche Liste erst laden, wenn der Bereich geöffnet wird – nicht bei jedem Seitenaufruf.
   useEffect(() => { if (showJoin) loadPublic() }, [showJoin])
@@ -45,7 +77,7 @@ export function WorldsPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rows = (data ?? []) as any[]
     const ws = rows.map(r => r.worlds).filter(Boolean) as World[]
-    setWorlds(ws)
+    setWorlds(applySavedOrder(ws))
     const roleMap: Record<string, string> = {}
     for (const r of rows) if (r.world_id) roleMap[r.world_id] = r.role
     setRoles(roleMap)
@@ -297,71 +329,23 @@ export function WorldsPage() {
             <p className="font-semibold">Noch keine Spielwelten.<br />Erstelle eine oder tritt bei!</p>
           </GameCard>
         ) : (
-          <div className="flex flex-col gap-3">
-            {worlds.map(w => {
-              const s = stats[w.id]
-              const isAdmin = roles[w.id] === 'admin'
-              const like = likes[w.id] ?? { count: 0, mine: false }
-              return (
-                // div statt button: der Daumen-hoch ist ein eigener Button und darf nicht in
-                // einem Button verschachtelt sein (ungültiges HTML, kaputte Klick-Ziele).
-                <div key={w.id} onClick={() => navigate(`/world/${w.id}`)} className="relative w-full text-left active:translate-y-[2px] transition-transform cursor-pointer">
-                  {/* Statusbadges der Welt: der Streifen über der Kachel ist sonst leer und
-                      lässt Namens- und Kennzahlen-Zeile die volle Breite. */}
-                  {(isAdmin || w.is_public || s?.activeEvent) && (
-                    <div className="absolute -top-2 right-4 z-10 flex items-center gap-1.5">
-                      {s?.activeEvent && (
-                        <span className="inline-flex items-center gap-1 bg-rose-500 text-white rounded-full px-2 py-0.5 text-[11px] font-extrabold shadow-[0_2px_0_#0000002e,inset_0_1px_0_#ffffff59]">
-                          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> Live-Event
-                        </span>
-                      )}
-                      {w.is_public && (
-                        <span className="inline-flex items-center gap-1 bg-sky-500 text-white rounded-full px-2 py-0.5 text-[11px] font-extrabold shadow-[0_2px_0_#0000002e,inset_0_1px_0_#ffffff59]">
-                          <Globe size={12} strokeWidth={2.75} /> Öffentlich
-                        </span>
-                      )}
-                      {isAdmin && (
-                        <span className="inline-flex items-center gap-1 bg-amber-400 text-amber-950 rounded-full px-2 py-0.5 text-[11px] font-extrabold shadow-[0_2px_0_#0000002e,inset_0_1px_0_#ffffff80]">
-                          <Crown size={12} strokeWidth={2.75} /> Admin
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  {/* Bewusst ohne farbigen Rahmen: Admin und Öffentlich stehen als Badges
-                      darüber im Klartext. Ein Farbcode würde dasselbe nochmal sagen, wäre für
-                      neue Spieler nicht lesbar und ginge beim nächsten Attribut aus. */}
-                  <GameCard>
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        {/* LIVE sitzt jetzt oben im Badge-Streifen – die Namenszeile hat dadurch
-                            die volle Breite und bricht bei langen Weltnamen später um. */}
-                        <p className="font-extrabold text-slate-800 truncate">{w.name}</p>
-                        {w.description && <p className="text-slate-500 text-xs mt-0.5 line-clamp-1">{w.description}</p>}
-                        <div className="flex items-center gap-3 mt-2 text-xs font-semibold text-slate-500">
-                          <span className="inline-flex items-center gap-1"><Users size={13} strokeWidth={2.5} /> {s?.members ?? '–'}</span>
-                          <span className="inline-flex items-center gap-1"><Layers size={13} strokeWidth={2.5} /> {s?.campaigns ?? 0} {(s?.campaigns ?? 0) === 1 ? 'Kampagne' : 'Kampagnen'}</span>
-                          {s?.activeEvent && <span className="text-rose-500 truncate">· {s.activeEvent}</span>}
-                        </div>
-                      </div>
-                      {/* Bewerten kann man nur, wo man Mitglied ist -> nur hier, nicht in der öffentlichen Liste */}
-                      <button
-                        onClick={e => { e.stopPropagation(); toggleLike(w.id) }}
-                        aria-pressed={like.mine}
-                        aria-label={like.mine ? 'Daumen-hoch zurücknehmen' : 'Daumen-hoch geben'}
-                        className={`flex flex-col items-center gap-0.5 rounded-xl px-2.5 py-1.5 flex-shrink-0 transition-colors active:scale-95 ${
-                          like.mine ? 'bg-violet-100 text-violet-600' : 'text-slate-400'
-                        }`}
-                      >
-                        <ThumbsUp size={17} strokeWidth={2.5} fill={like.mine ? 'currentColor' : 'none'} />
-                        <span className="text-[11px] font-extrabold">{like.count}</span>
-                      </button>
-                      <span className="text-slate-400 text-xl flex-shrink-0">›</span>
-                    </div>
-                  </GameCard>
-                </div>
-              )
-            })}
-          </div>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onWorldDragEnd}>
+            <SortableContext items={worlds.map(w => w.id)} strategy={verticalListSortingStrategy}>
+              <div className="flex flex-col gap-3">
+                {worlds.map(w => (
+                  <SortableWorldCard
+                    key={w.id}
+                    w={w}
+                    s={stats[w.id]}
+                    isAdmin={roles[w.id] === 'admin'}
+                    like={likes[w.id] ?? { count: 0, mine: false }}
+                    onOpen={() => navigate(`/world/${w.id}`)}
+                    onToggleLike={() => toggleLike(w.id)}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         )}
       </div>
 
@@ -380,6 +364,84 @@ export function WorldsPage() {
           </GameCard>
         </div>
       )}
+    </div>
+  )
+}
+
+// Eine Welt-Kachel, per Griff (links) umsortierbar. Antippen der Kachel öffnet die Welt,
+// der Daumen-hoch-Button und der Griff stoppen die Weiterleitung (stopPropagation).
+function SortableWorldCard({ w, s, isAdmin, like, onOpen, onToggleLike }: {
+  w: World
+  s: WorldStats | undefined
+  isAdmin: boolean
+  like: LikeState
+  onOpen: () => void
+  onToggleLike: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: w.id })
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 20 : undefined, opacity: isDragging ? 0.9 : 1 }}
+      onClick={onOpen}
+      className="relative w-full text-left active:translate-y-[2px] transition-transform cursor-pointer"
+    >
+      {(isAdmin || w.is_public || s?.activeEvent) && (
+        <div className="absolute -top-2 right-4 z-10 flex items-center gap-1.5">
+          {s?.activeEvent && (
+            <span className="inline-flex items-center gap-1 bg-rose-500 text-white rounded-full px-2 py-0.5 text-[11px] font-extrabold shadow-[0_2px_0_#0000002e,inset_0_1px_0_#ffffff59]">
+              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> Live-Event
+            </span>
+          )}
+          {w.is_public && (
+            <span className="inline-flex items-center gap-1 bg-sky-500 text-white rounded-full px-2 py-0.5 text-[11px] font-extrabold shadow-[0_2px_0_#0000002e,inset_0_1px_0_#ffffff59]">
+              <Globe size={12} strokeWidth={2.75} /> Öffentlich
+            </span>
+          )}
+          {isAdmin && (
+            <span className="inline-flex items-center gap-1 bg-amber-400 text-amber-950 rounded-full px-2 py-0.5 text-[11px] font-extrabold shadow-[0_2px_0_#0000002e,inset_0_1px_0_#ffffff80]">
+              <Crown size={12} strokeWidth={2.75} /> Admin
+            </span>
+          )}
+        </div>
+      )}
+      <GameCard>
+        <div className="flex items-center gap-2">
+          {/* Griff: touch-none, damit das Ziehen nicht mit dem Scrollen kollidiert. */}
+          <button
+            {...attributes}
+            {...listeners}
+            onClick={e => e.stopPropagation()}
+            aria-label="Zum Umsortieren ziehen"
+            className="flex-shrink-0 -ml-1 p-1 text-slate-300 cursor-grab active:cursor-grabbing touch-none"
+          >
+            <GripVertical size={20} strokeWidth={2.5} />
+          </button>
+          <div className="flex items-center justify-between gap-3 flex-1 min-w-0">
+            <div className="min-w-0 flex-1">
+              <p className="font-extrabold text-slate-800 truncate">{w.name}</p>
+              {w.description && <p className="text-slate-500 text-xs mt-0.5 line-clamp-1">{w.description}</p>}
+              <div className="flex items-center gap-3 mt-2 text-xs font-semibold text-slate-500">
+                <span className="inline-flex items-center gap-1"><Users size={13} strokeWidth={2.5} /> {s?.members ?? '–'}</span>
+                <span className="inline-flex items-center gap-1"><Layers size={13} strokeWidth={2.5} /> {s?.campaigns ?? 0} {(s?.campaigns ?? 0) === 1 ? 'Kampagne' : 'Kampagnen'}</span>
+                {s?.activeEvent && <span className="text-rose-500 truncate">· {s.activeEvent}</span>}
+              </div>
+            </div>
+            <button
+              onClick={e => { e.stopPropagation(); onToggleLike() }}
+              aria-pressed={like.mine}
+              aria-label={like.mine ? 'Daumen-hoch zurücknehmen' : 'Daumen-hoch geben'}
+              className={`flex flex-col items-center gap-0.5 rounded-xl px-2.5 py-1.5 flex-shrink-0 transition-colors active:scale-95 ${
+                like.mine ? 'bg-violet-100 text-violet-600' : 'text-slate-400'
+              }`}
+            >
+              <ThumbsUp size={17} strokeWidth={2.5} fill={like.mine ? 'currentColor' : 'none'} />
+              <span className="text-[11px] font-extrabold">{like.count}</span>
+            </button>
+            <span className="text-slate-400 text-xl flex-shrink-0">›</span>
+          </div>
+        </div>
+      </GameCard>
     </div>
   )
 }
