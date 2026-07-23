@@ -171,7 +171,10 @@ export function ImageGamePage() {
   }, [blurStacks])
 
   useEffect(() => {
-    if (!placing || !begun) return
+    // Während des Speicherns (submitting) NICHT weiterzählen: der gewertete Wert ist beim
+    // Klick eingefroren (siehe confirmClick). Der sichtbare Timer soll dann stehen bleiben und
+    // nicht die netzabhängige Bestätigungs-/Speicherdauer mithochzählen.
+    if (!placing || !begun || submitting) return
     const interval = setInterval(() => {
       const real = (Date.now() - startTimeRef.current) / 1000
       setElapsed(Math.round(effectiveElapsed(real, timerStacks, hasZeitlupe)))
@@ -179,7 +182,7 @@ export function ImageGamePage() {
       if (blurStacks > 0) setBlurred(blurIntervals.some(([a, b]) => real >= a && real < b))
     }, 100)
     return () => clearInterval(interval)
-  }, [placing, begun, timerStacks, hasZeitlupe, blurStacks, blurIntervals])
+  }, [placing, begun, submitting, timerStacks, hasZeitlupe, blurStacks, blurIntervals])
 
   function startRound() {
     startTimeRef.current = Date.now()
@@ -234,6 +237,10 @@ export function ImageGamePage() {
     const real = (Date.now() - startTimeRef.current) / 1000
     const seconds = Math.round(effectiveElapsed(real, timerStacks, hasZeitlupe)) // Timer-Debuff/Zeitlupe verzerren die Zeit
     const hit = isHit(tip.x, tip.y, image.target_x, image.target_y, image.target_radius, nat.w, nat.h)
+    // Timer sichtbar auf dem gewerteten Wert einfrieren, bevor der (netzabhängige) Speicher-
+    // vorgang startet – sonst zählt die Anzeige während des Wartens weiter.
+    setElapsed(seconds)
+    setBlurred(false)
     setSubmitting(true)
 
     if (isCampaign) {
