@@ -7,6 +7,7 @@ import { levelFromXp } from '../lib/scoring'
 import { FramedAvatar } from '../components/ui/FramedAvatar'
 import { GameCard } from '../components/ui/GameCard'
 import type { LeaderboardEntry } from '../types'
+import { LeaderboardHeader, sortLeaders, type LeaderSort } from '../components/leaderboard/LeaderboardControls'
 
 export function LeaderboardPage() {
   const { worldId } = useParams<{ worldId: string }>()
@@ -17,6 +18,8 @@ export function LeaderboardPage() {
   const [avatars, setAvatars] = useState<Map<string, string | null>>(new Map())
   const [frames, setFrames] = useState<Map<string, string | null>>(new Map())
   const [loading, setLoading] = useState(true)
+  const [sort, setSort] = useState<LeaderSort>('points')
+  const [worldName, setWorldName] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -27,9 +30,14 @@ export function LeaderboardPage() {
         : await supabase.rpc('global_leaderboard')
       const rows = (data ?? []) as LeaderboardEntry[]
       let cert = new Set<string>()
+      let wName: string | null = null
       if (worldId) {
-        const { data: m } = await supabase.from('world_members').select('user_id, certified').eq('world_id', worldId)
+        const [{ data: m }, { data: w }] = await Promise.all([
+          supabase.from('world_members').select('user_id, certified').eq('world_id', worldId),
+          supabase.from('worlds').select('name').eq('id', worldId).single(),
+        ])
         cert = new Set((m ?? []).filter(x => x.certified).map(x => x.user_id))
+        wName = w?.name ?? null
       }
       // Profilbilder + Rahmen werden von den Leaderboard-RPCs nicht geliefert -> separat nachladen.
       const ids = rows.map(r => r.user_id)
@@ -44,6 +52,7 @@ export function LeaderboardPage() {
         setCertified(cert)
         setAvatars(avatarMap)
         setFrames(frameMap)
+        setWorldName(wName)
         setLoading(false)
       }
     }
@@ -52,11 +61,19 @@ export function LeaderboardPage() {
   }, [worldId])
 
   const base = worldId ? `/world/${worldId}` : ''
+  // entries kommen punkte-sortiert vom RPC -> Index = echter Punkte-Platz (bleibt trotz Umsortierung).
+  const pointsRank = new Map(entries.map((e, i) => [e.user_id, i + 1]))
+  const sorted = sortLeaders(entries, sort)
 
   return (
     <div className="p-4 max-w-lg mx-auto pt-5">
-      <h1 className="text-2xl font-extrabold text-white mb-1">{worldId ? 'Rangliste' : 'Globale Rangliste'}</h1>
-      <p className="text-white/50 text-sm mb-5">{worldId ? 'Diese Spielwelt' : 'Über alle Spielwelten'}</p>
+      <LeaderboardHeader
+        variant={worldId ? 'world' : 'global'}
+        title={worldId ? (worldName ? `${worldName} – Rangliste` : 'Spielwelt-Rangliste') : undefined}
+        subtitle={worldId ? 'Spielwelt' : 'Über alle Spielwelten'}
+        sort={sort}
+        onSort={setSort}
+      />
 
       {loading ? (
         <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" /></div>
@@ -64,11 +81,11 @@ export function LeaderboardPage() {
         <GameCard className="text-center py-12 text-slate-400 font-semibold">Noch keine Einträge</GameCard>
       ) : (
         <div className="flex flex-col gap-2.5">
-          {entries.map((entry, idx) => (
+          {sorted.map((entry) => (
             <LeaderboardRow
               key={entry.user_id}
               entry={entry}
-              rank={idx + 1}
+              rank={pointsRank.get(entry.user_id) ?? 0}
               isMe={entry.user_id === user?.id}
               certified={certified.has(entry.user_id)}
               avatarUrl={avatars.get(entry.user_id) ?? null}

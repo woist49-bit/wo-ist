@@ -11,6 +11,7 @@ import { formatCountdown, relativeDay, IMAGE_PLAY_WINDOW_MS, berlinWallTimeToUtc
 import { GameCard } from '../components/ui/GameCard'
 import { FramedAvatar } from '../components/ui/FramedAvatar'
 import { EventImagePopup, type ImageStatus } from '../components/event/EventImagePopup'
+import { SortChips, sortLeaders, type LeaderSort } from '../components/leaderboard/LeaderboardControls'
 import type { LiveEvent, EventImage, PlayerAttempt, EventLeaderboardEntry } from '../types'
 
 // Aggregierte Item-/Debuff-Anzeige pro Spieler (über alle Bilder des Events)
@@ -40,6 +41,7 @@ export function EventPage() {
   // Bilder <-> Event-Rangliste. Die Rangliste lag früher unter der Bilderliste und wurde
   // deshalb übersehen; jetzt ist sie ein gleichwertiger Tab statt eines Scroll-Ziels.
   const [tab, setTab] = useState<'images' | 'board'>('images')
+  const [boardSort, setBoardSort] = useState<LeaderSort>('points')
 
   useEffect(() => { if (eventId && user) load() }, [eventId, user])
 
@@ -103,6 +105,10 @@ export function EventPage() {
   const nextSlot = slots.find(s => s > now) ?? null
   // Vergangene Tage ohne veröffentlichtes Bild (2 Bilder an einem Tag ändern nichts)
   const gapDays = slots.filter(s => s <= now && !images.some(img => sameDayMs(new Date(img.unlocks_at).getTime(), s)))
+
+  // Event-Rangliste: board kommt punkte-sortiert vom RPC -> Index = echter Punkte-Platz (bleibt bei Umsortierung).
+  const boardRank = new Map(board.map((e, i) => [e.user_id, i + 1]))
+  const sortedBoard = sortLeaders(board, boardSort)
 
   return (
     <div className="p-4 max-w-lg mx-auto pt-5 pb-8">
@@ -277,8 +283,11 @@ export function EventPage() {
       board.length === 0 ? (
         <GameCard className="text-center py-8 text-slate-400 text-sm font-semibold">Noch keine Punkte gesammelt.</GameCard>
       ) : (
+        <>
+        <SortChips sort={boardSort} onSort={setBoardSort} accent="bg-rose-500" />
         <div className="flex flex-col gap-2.5">
-          {board.map((entry, idx) => {
+          {sortedBoard.map((entry) => {
+            const rank = boardRank.get(entry.user_id) ?? 0
             const isMe = entry.user_id === user?.id
             const { level } = levelFromXp(entry.xp)
             const agg = itemLog.get(entry.user_id)
@@ -292,8 +301,8 @@ export function EventPage() {
                   <div className="flex items-center gap-3">
                     <div className="relative flex-shrink-0">
                       <FramedAvatar url={avatars.get(entry.user_id) ?? null} name={entry.username} frame={frames.get(entry.user_id) ?? null} size={44} paused={false} className="text-lg shadow-[inset_0_2px_0_#ffffff33]" />
-                      <span className={`absolute -top-1.5 -left-1.5 min-w-[1.25rem] h-5 px-1 rounded-full flex items-center justify-center font-extrabold text-[11px] ring-2 ring-[#fdf6e3] shadow-[0_1px_2px_rgba(0,0,0,0.25)] ${rankBadge(idx)}`}>
-                        {idx + 1}
+                      <span className={`absolute -top-1.5 -left-1.5 min-w-[1.25rem] h-5 px-1 rounded-full flex items-center justify-center font-extrabold text-[11px] ring-2 ring-[#fdf6e3] shadow-[0_1px_2px_rgba(0,0,0,0.25)] ${rankBadge(rank - 1)}`}>
+                        {rank}
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
@@ -329,6 +338,7 @@ export function EventPage() {
             )
           })}
         </div>
+        </>
       ))}
 
       {popupImg && (() => {
