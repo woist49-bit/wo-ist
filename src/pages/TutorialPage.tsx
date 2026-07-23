@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, PartyPopper } from 'lucide-react'
+import { ChevronLeft, PartyPopper, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { useNotifications } from '../stores/notifications'
@@ -39,6 +39,10 @@ export function TutorialPage() {
     const isLastSlide = slide === TUTORIAL_SLIDES.length - 1
     return (
       <div className="fixed inset-0 z-50 bg-gradient-to-b from-slate-600 via-slate-700 to-slate-800 flex flex-col">
+        {/* Jederzeit rauskommen – Tutorial ist wiederholbar, kein Fortschritt geht verloren. */}
+        <div className="px-3 pt-2 pb-1 safe-top flex justify-end flex-shrink-0">
+          <IconButton variant="grey" onClick={() => navigate('/worlds')} aria-label="Tutorial verlassen"><X size={22} strokeWidth={2.5} /></IconButton>
+        </div>
         <div className="flex-1 flex flex-col items-center justify-center px-6 text-center min-h-0">
           <div className="w-24 h-24 rounded-[1.75rem] bg-white flex items-center justify-center shadow-[0_6px_0_rgba(0,0,0,0.25)] mb-7">
             <Icon size={52} strokeWidth={2} className="text-violet-500" />
@@ -79,6 +83,7 @@ export function TutorialPage() {
         key={imgIdx}
         image={TUTORIAL_IMAGES[imgIdx]}
         isLast={imgIdx === TUTORIAL_IMAGES.length - 1}
+        onExit={() => navigate('/worlds')}
         onBack={() => {
           if (imgIdx > 0) setImgIdx(imgIdx - 1)
           else { setSlide(TUTORIAL_SLIDES.length - 1); setPhase('slides') }
@@ -106,11 +111,12 @@ export function TutorialPage() {
   )
 }
 
-function TutorialImageStep({ image, isLast, onNext, onBack }: {
+function TutorialImageStep({ image, isLast, onNext, onBack, onExit }: {
   image: TutorialImage
   isLast: boolean
   onNext: () => void
   onBack: () => void
+  onExit: () => void
 }) {
   const [nat, setNat] = useState({ w: 0, h: 0 })
   const [tip, setTip] = useState<{ x: number; y: number } | null>(null)
@@ -154,6 +160,7 @@ function TutorialImageStep({ image, isLast, onNext, onBack }: {
           <div className="flex-1 bg-[#fdf6e3] border-[3px] border-[#e6d3a3] rounded-2xl px-3.5 py-2.5 shadow-[0_4px_0_#00000022]">
             <p className="text-sm font-semibold text-slate-700 leading-snug">{image.hint}</p>
           </div>
+          <IconButton variant="grey" onClick={onExit} aria-label="Tutorial verlassen"><X size={22} strokeWidth={2.5} /></IconButton>
         </div>
       </div>
 
