@@ -63,8 +63,42 @@ export function ImageGamePage() {
   const [magHalf, setMagHalf] = useState<'left' | 'right' | 'top' | 'bottom' | null>(null)
 
   const startTimeRef = useRef<number>(Date.now())
+  // Runde gilt als aufgelöst, sobald regulär bestätigt oder abgebrochen wurde – verhindert,
+  // dass der Verlassen-Schutz unten denselben Versuch ein zweites Mal verbucht.
+  const resolvedRef = useRef(false)
+  // Aktueller Rundenzustand für den Verlassen-Schutz. Nötig, weil der Browser-Zurück-Button
+  // bzw. die Wisch-Geste vom Bildschirmrand den In-App-Zurück-Button (mit Abbruch-Dialog)
+  // umgeht und die Komponente direkt unmountet. Ref, damit der Unmount-Cleanup frische Werte sieht.
+  const leaveRef = useRef<{
+    active: boolean; isCampaign: boolean; imageId: string; userId: string
+    campaignId?: string; worldId?: string; tipX: number; tipY: number
+    timerStacks: number; hasZeitlupe: boolean
+  } | null>(null)
 
   useEffect(() => { if (imageId && user) load() }, [imageId, user])
+
+  // Verlassen-Schutz: Wird eine laufende Runde durch Verlassen der Seite beendet (Browser-Zurück,
+  // Wisch-Geste vom Rand, o. Ä.) OHNE vorheriges Bestätigen/Abbrechen, gilt der Versuch als
+  // verbraucht – sonst könnte man ein Bild öffnen, sich den Ort merken und ohne Wertung wieder
+  // rausgehen. Für Live-Event UND Kampagne. fire-and-forget: der Request läuft nach dem Unmount
+  // weiter (Client-seitige Zurück-Navigation lädt die Seite nicht neu). .then() stößt ihn an –
+  // ohne then/await schickt supabase-js die Anfrage nicht ab.
+  useEffect(() => () => {
+    const s = leaveRef.current
+    if (!s || !s.active || resolvedRef.current) return
+    if (s.isCampaign) {
+      supabase.from('campaign_progress').upsert({
+        campaign_id: s.campaignId, image_id: s.imageId, user_id: s.userId,
+        world_id: s.worldId, found: false, points: 0,
+      }, { onConflict: 'campaign_id,image_id,user_id' }).then(() => {})
+    } else {
+      const seconds = Math.round(effectiveElapsed((Date.now() - startTimeRef.current) / 1000, s.timerStacks, s.hasZeitlupe))
+      supabase.from('player_attempts').insert({
+        image_id: s.imageId, user_id: s.userId, click_x: s.tipX, click_y: s.tipY,
+        is_correct: false, points: 0, time_seconds: seconds,
+      }).then(() => { supabase.rpc('log_image_items', { p_image_id: s.imageId }) })
+    }
+  }, [])
 
   async function load() {
     // Rundenzustand zurücksetzen – die Komponente bleibt bei „Weiter" (neues Bild derselben
@@ -74,6 +108,7 @@ export function ImageGamePage() {
     setBegun(false); setImgLoaded(false); setImgError(false); setElapsed(0)
     setMagHalf(null); setSabotageAck(false); setSubmitting(false)
     setCampaignFound(false); setCampaignAttempted(false)
+    resolvedRef.current = false   // neue Runde -> Verlassen-Schutz wieder scharf
     startTimeRef.current = Date.now()
 
     const [imgRes, attRes, roleRes] = await Promise.all([
@@ -241,6 +276,7 @@ export function ImageGamePage() {
     // vorgang startet – sonst zählt die Anzeige während des Wartens weiter.
     setElapsed(seconds)
     setBlurred(false)
+    resolvedRef.current = true   // regulär bestätigt -> Verlassen-Schutz nicht mehr auslösen
     setSubmitting(true)
 
     if (isCampaign) {
@@ -301,6 +337,7 @@ export function ImageGamePage() {
 
   async function abortConfirm() {
     if (!image || !user) { navigate(-1); return }
+    resolvedRef.current = true   // regulär abgebrochen -> Verlassen-Schutz nicht doppelt zählen
     setSubmitting(true)
 
     if (isCampaign) {
@@ -360,6 +397,16 @@ export function ImageGamePage() {
     if (nl.level > oldLevel) triggerLevelUp(nl.level, nl.xpNeeded - nl.xpIntoLevel)
 
     refreshProfile() // Header: Gems (und ggf. Level) live aktualisieren
+  }
+
+  // Rundenzustand für den Verlassen-Schutz aktuell halten (läuft bei jedem Render, auch vor den
+  // frühen Returns). active = laufende, noch nicht aufgelöste Runde, in der ein Verlassen zählt:
+  // Live-Event immer, Kampagne nur solange noch Punkte auf dem Spiel stehen (kein Versuch bisher).
+  leaveRef.current = {
+    active: begun && placing && (!isCampaign || !campaignAttempted) && !!image && !!user,
+    isCampaign, imageId: image?.id ?? '', userId: user?.id ?? '',
+    campaignId, worldId, tipX: tip?.x ?? 0, tipY: tip?.y ?? 0,
+    timerStacks, hasZeitlupe,
   }
 
   if (loading) return <GameLoadingScreen />
