@@ -112,41 +112,42 @@ export function EventPage() {
 
   return (
     <div className="p-4 max-w-lg mx-auto pt-5 pb-8">
-      {/* Modus-Identität: große rote Puls-Pille MIT dem Event-Titel (Farbe + Puls = Live-Event). */}
-      <div className="inline-flex items-center gap-2.5 bg-rose-500 text-white rounded-full px-5 py-2.5 mb-2 max-w-full shadow-[0_4px_0_#9f1239,inset_0_1px_0_#ffffff80]">
-        <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse flex-shrink-0" />
-        <span className="text-xl font-extrabold leading-tight break-words">{event.title}</span>
-      </div>
-      <p className="text-white/50 text-sm mb-3">{formatDateRange(event.starts_at, event.ends_at)}</p>
-      {isAdmin ? (
-        <div className="inline-block bg-sky-500 text-white font-extrabold text-sm rounded-full px-4 py-1.5 mb-5 shadow-[0_3px_0_#0369a1,inset_0_1px_0_#ffffff80]">
-          👑 Admin – du verwaltest dieses Event
+      {/* Modus-Banner: Titel + Zeitraum/Punkte + Beschreibung – alles in der farbigen Pille (wie Kampagne). */}
+      <div className="rounded-2xl px-4 py-3 mb-5 text-white bg-rose-500 shadow-[0_4px_0_#9f1239]">
+        <div className="flex items-center gap-2.5">
+          <span className="w-3.5 h-3.5 rounded-full bg-white animate-pulse flex-shrink-0" />
+          <div className="min-w-0">
+            <p className="text-xl font-extrabold leading-tight truncate">{event.title}</p>
+            <p className="text-xs text-white/85 truncate">
+              {formatDateRange(event.starts_at, event.ends_at)}
+              {isAdmin ? ' · Admin-Ansicht' : ` · Deine Punkte: ${totalPoints.toLocaleString()}`}
+            </p>
+          </div>
         </div>
-      ) : (
-        <div className="inline-block bg-amber-400 text-amber-950 font-extrabold text-sm rounded-full px-4 py-1.5 mb-5 shadow-[0_3px_0_#b45309,inset_0_1px_0_#ffffff80]">
-          Deine Punkte: {totalPoints.toLocaleString()}
+        {event.description && (
+          <p className="text-xs text-white/80 leading-relaxed mt-3 pt-3 border-t border-white/20 whitespace-pre-line">
+            {event.description}
+          </p>
+        )}
+        {/* Umschalter jetzt IM Banner: heller gleitender Indikator auf dem Rot. */}
+        <div className="relative flex rounded-xl bg-white/15 p-1 mt-3">
+          <span
+            aria-hidden
+            className="absolute top-1 bottom-1 left-1 rounded-lg bg-white shadow-[0_2px_0_#00000022] transition-transform duration-200 ease-out"
+            style={{ width: 'calc(50% - 0.25rem)', transform: tab === 'board' ? 'translateX(100%)' : 'translateX(0)' }}
+          />
+          {([['images', 'Bilder'], ['board', 'Event-Rangliste']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTab(key)}
+              aria-pressed={tab === key}
+              className={`relative z-10 flex-1 py-2 rounded-lg font-bold text-sm transition-colors ${tab === key ? 'text-rose-600' : 'text-white/70'}`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
-      )}
-
-      {/* Umschalter: gleitender Indikator liegt als eigenes Element hinter den Buttons und
-          wird um die eigene Breite verschoben (p-1 des Containers = 0.25rem Versatz). */}
-      <div className="relative flex rounded-2xl bg-[#efe2c4] p-1 mb-5">
-        <span
-          aria-hidden
-          className="absolute top-1 bottom-1 left-1 rounded-xl bg-violet-500 shadow-[0_2px_0_#5b21b6] transition-transform duration-200 ease-out"
-          style={{ width: 'calc(50% - 0.25rem)', transform: tab === 'board' ? 'translateX(100%)' : 'translateX(0)' }}
-        />
-        {([['images', 'Bilder'], ['board', 'Event-Rangliste']] as const).map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setTab(key)}
-            aria-pressed={tab === key}
-            className={`relative z-10 flex-1 py-2.5 rounded-xl font-bold text-sm transition-colors ${tab === key ? 'text-white' : 'text-slate-500'}`}
-          >
-            {label}
-          </button>
-        ))}
       </div>
 
       {tab === 'images' && (<>

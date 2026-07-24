@@ -74,25 +74,26 @@ export function CampaignPage() {
 
   return (
     <div className="p-4 max-w-lg mx-auto pt-4 pb-8">
-      {/* Modus-Identität: große violette Globus-Pille MIT dem Kampagnen-Titel (Farbe + Globus = Kampagne). */}
-      <div className="flex flex-wrap items-center gap-2 mb-2">
-        <div className="inline-flex items-center gap-2.5 bg-violet-500 text-white rounded-full px-5 py-2.5 max-w-full shadow-[0_4px_0_#5b21b6,inset_0_1px_0_#ffffff80]">
-          <Globe size={20} strokeWidth={2.75} className="flex-shrink-0" />
-          <span className="text-xl font-extrabold leading-tight break-words">{campaign.title}</span>
+      {/* Modus-Banner: Titel + Art/Fortschritt + Hinweistext – alles in der farbigen Pille. */}
+      <div className="rounded-2xl px-4 py-3 mb-6 text-white bg-violet-500 shadow-[0_4px_0_#5b21b6]">
+        <div className="flex items-center gap-2.5">
+          <Globe size={28} strokeWidth={2.75} className="flex-shrink-0" />
+          <div className="min-w-0">
+            <p className="text-xl font-extrabold leading-tight truncate">{campaign.title}</p>
+            <p className="text-xs text-white/85 truncate">
+              {campaign.is_legacy ? 'Legacy-Kampagne' : 'Kampagne'}
+              {isAdmin ? ' · Admin-Ansicht' : ` · ${doneCount} von ${images.length} gefunden`}
+            </p>
+          </div>
         </div>
-        {campaign.is_legacy && <span className="text-xs font-bold text-amber-300 border border-amber-300/50 rounded-full px-2 py-0.5">Legacy</span>}
+        {!isAdmin && (
+          <p className="text-xs text-white/80 leading-relaxed mt-3 pt-3 border-t border-white/20">
+            {isEventCampaign
+              ? 'Wer beim Live-Event dabei war, spielt ohne Punkte. Neue Spieler bekommen Punkte beim ersten Fund. Bilder sind beliebig wiederholbar und schalten der Reihe nach frei.'
+              : 'Finde die gesuchte Person auf jedem Bild. Punkte gibt\'s beim ersten Fund, danach beliebig wiederholbar. Bilder schalten der Reihe nach frei.'}
+          </p>
+        )}
       </div>
-      {isAdmin
-        ? <p className="text-sky-300 font-semibold mb-4">👑 Admin – du verwaltest diese Kampagne</p>
-        : <p className="text-white/60 font-semibold mb-4">{doneCount} von {images.length} gefunden</p>}
-
-      {!isAdmin && (
-        <GameCard className="mb-6 !bg-[#efe2c4] !border-[#dcc99c] text-xs text-slate-600 py-3">
-          {isEventCampaign
-            ? 'Wer beim Live-Event dabei war, spielt ohne Punkte. Neue Spieler bekommen Punkte beim ersten Fund. Bilder sind beliebig wiederholbar und schalten der Reihe nach frei.'
-            : 'Finde die gesuchte Person auf jedem Bild. Punkte gibt\'s beim ersten Fund, danach beliebig wiederholbar. Bilder schalten der Reihe nach frei.'}
-        </GameCard>
-      )}
 
       {images.length === 0 ? (
         <GameCard className="text-center py-12 text-slate-400">
