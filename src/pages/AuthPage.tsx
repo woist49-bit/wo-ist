@@ -96,8 +96,15 @@ export function AuthPage() {
               Wir haben dir eine Bestätigungs-E-Mail an <b className="break-all">{email.trim().toLowerCase()}</b> geschickt.
             </p>
             <p className="text-slate-600 text-sm mb-4">
-              Klick den Link darin, dann kannst du dich anmelden. Schau notfalls im Spam-Ordner nach.
+              Klick den Link darin, dann kannst du dich anmelden.
             </p>
+            {/* Deutlicher Spam-Hinweis: Bestätigungsmails landen sehr oft im Spam-/Werbung-Ordner. */}
+            <div className="flex items-start gap-2.5 bg-amber-50 border-2 border-amber-300 rounded-xl px-3.5 py-3 mb-4 text-left">
+              <span className="text-xl leading-none flex-shrink-0">📁</span>
+              <p className="text-amber-900 text-xs leading-relaxed">
+                <b>Keine Mail erhalten?</b> Schau unbedingt im <b>Spam- bzw. Werbung-Ordner</b> nach – dort landen Bestätigungsmails besonders oft. Es kann auch ein paar Minuten dauern.
+              </p>
+            </div>
             {resendMsg && <p className="text-slate-600 text-sm font-medium mb-3">{resendMsg}</p>}
             <div className="flex flex-col gap-3">
               <Button variant="secondary" loading={resending} onClick={handleResend} className="w-full">
