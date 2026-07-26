@@ -94,6 +94,19 @@ const FLY_IN_END_ALTITUDE = 2.4
 const FLY_IN_FROM = { lat: 20, lng: 0 }
 // ============================================================================
 
+// ============================================================================
+// FLUGZEUG, das um den Globus fliegt (rein dekorativ). Simpler Umlauf wie die Wolken:
+// ein geneigter Pivot dreht sich um die Y-Achse, das Modell sitzt auf der Bahn.
+const PLANE_MODEL = '/models/cartoon_plane_rotated.glb'
+const PLANE_ORBIT_ALTITUDE = 0.03   // Höhe über der Oberfläche (= Wolkenhöhe; Anteil des Globus-Radius)
+const PLANE_ORBIT_TILT_DEG = 22     // Neigung der Umlaufbahn (schöner als exakt am Äquator)
+const PLANE_SPEED = 0.22            // Umlaufgeschwindigkeit rad/s; Vorzeichen = Flugrichtung
+const PLANE_SCALE = 0.11            // Größe (Anteil des Globus-Radius)
+// Feinausrichtung des Modells: Nase in Flugrichtung, Oberseite nach außen. Falls es falsch
+// herum / schräg fliegt, NUR hier anpassen (meist y ±180 für Richtung, x/z ±90 für Lage).
+const PLANE_ROTATION_DEG = { x: 0, y: 0, z: 0 }
+// ============================================================================
+
 // Weicher Leuchtpunkt (Blitz) via Canvas – additive Sprite-Textur.
 function makeGlowTexture(): THREE.Texture {
   const s = 64
@@ -360,6 +373,79 @@ export function CampaignGlobePage() {
       clearTimeout(flashTimer)
       for (const o of added) scene.remove(o)
       for (const d of disposables) d.dispose()
+    }
+  }, [ready])
+
+  // Flugzeug, das um den Globus fliegt (dekorativ). orbitPivot dreht sich um Y; das Modell
+  // sitzt auf der geneigten Bahn und schaut in Flugrichtung (Halter-Ausrichtung + Feinjustage).
+  useEffect(() => {
+    const g = globeRef.current as any
+    if (!g || !ready) return
+    const scene: THREE.Scene = g.scene()
+    const R: number = g.getGlobeRadius()
+
+    const orbitPivot = new THREE.Group()
+    orbitPivot.rotation.x = THREE.MathUtils.degToRad(PLANE_ORBIT_TILT_DEG) // Bahn neigen
+    scene.add(orbitPivot)
+
+    // Halter sitzt bei +X auf der Bahn. So gedreht, dass ein Modell mit „vorne = -Z, oben = +Y"
+    // mit der Nase in Flugrichtung (Tangente -Z) zeigt und die Oberseite radial nach außen.
+    const holder = new THREE.Group()
+    holder.position.set(R * (1 + PLANE_ORBIT_ALTITUDE), 0, 0)
+    holder.rotation.z = -Math.PI / 2
+    orbitPivot.add(holder)
+
+    const loader = new GLTFLoader()
+    const draco = new DRACOLoader()
+    draco.setDecoderPath('/draco/')
+    loader.setDRACOLoader(draco)
+    let plane: THREE.Object3D | null = null
+    let disposed = false
+
+    loader.load(
+      PLANE_MODEL,
+      (gltf) => {
+        if (disposed) return
+        plane = gltf.scene
+        const box = new THREE.Box3().setFromObject(plane)
+        const size = box.getSize(new THREE.Vector3())
+        const center = box.getCenter(new THREE.Vector3())
+        const maxDim = Math.max(size.x, size.y, size.z) || 1
+        const s = (R * PLANE_SCALE) / maxDim
+        plane.scale.setScalar(s)
+        plane.position.copy(center).multiplyScalar(-s) // Modell um seinen Mittelpunkt zentrieren
+        plane.rotation.set(
+          THREE.MathUtils.degToRad(PLANE_ROTATION_DEG.x),
+          THREE.MathUtils.degToRad(PLANE_ROTATION_DEG.y),
+          THREE.MathUtils.degToRad(PLANE_ROTATION_DEG.z),
+        )
+        holder.add(plane)
+      },
+      undefined,
+      (err) => console.error('Flugzeug-Modell konnte nicht geladen werden:', err),
+    )
+
+    let raf = 0
+    let last = performance.now()
+    const tick = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000)
+      last = now
+      orbitPivot.rotation.y += PLANE_SPEED * dt
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+
+    return () => {
+      disposed = true
+      cancelAnimationFrame(raf)
+      draco.dispose()
+      scene.remove(orbitPivot)
+      plane?.traverse((o) => {
+        const mesh = o as THREE.Mesh
+        if (mesh.geometry) mesh.geometry.dispose()
+        const mm = mesh.material as THREE.Material | THREE.Material[] | undefined
+        for (const mat of (Array.isArray(mm) ? mm : mm ? [mm] : [])) mat.dispose()
+      })
     }
   }, [ready])
 
