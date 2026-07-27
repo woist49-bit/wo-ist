@@ -66,33 +66,39 @@ export function LeaderboardPage() {
   const sorted = sortLeaders(entries, sort)
 
   return (
-    <div className="p-4 max-w-lg mx-auto pt-5">
-      <LeaderboardHeader
-        variant={worldId ? 'world' : 'global'}
-        title={worldId ? (worldName ? `${worldName} – Rangliste` : 'Spielwelt-Rangliste') : undefined}
-        subtitle={worldId ? 'Spielwelt' : 'Über alle Spielwelten'}
-        sort={sort}
-        onSort={setSort}
-      />
+    <div className="h-full flex flex-col max-w-lg mx-auto w-full pt-5">
+      <div className="px-4 flex-shrink-0">
+        <LeaderboardHeader
+          variant={worldId ? 'world' : 'global'}
+          title={worldId ? (worldName ? `${worldName} – Rangliste` : 'Spielwelt-Rangliste') : undefined}
+          subtitle={worldId ? 'Spielwelt' : 'Über alle Spielwelten'}
+          sort={sort}
+          onSort={setSort}
+        />
+      </div>
 
       {loading ? (
         <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" /></div>
       ) : entries.length === 0 ? (
-        <GameCard className="text-center py-12 text-slate-400 font-semibold">Noch keine Einträge</GameCard>
+        <div className="px-4"><GameCard className="text-center py-12 text-slate-400 font-semibold">Noch keine Einträge</GameCard></div>
       ) : (
-        <div className="flex flex-col gap-2.5">
-          {sorted.map((entry) => (
-            <LeaderboardRow
-              key={entry.user_id}
-              entry={entry}
-              rank={pointsRank.get(entry.user_id) ?? 0}
-              isMe={entry.user_id === user?.id}
-              certified={certified.has(entry.user_id)}
-              avatarUrl={avatars.get(entry.user_id) ?? null}
-              frame={frames.get(entry.user_id) ?? null}
-              onOpen={() => navigate(`${base}/profile/${entry.user_id}`)}
-            />
-          ))}
+        // Eigener Scrollbereich: nur die Namensliste scrollt, der Kopf oben bleibt fest.
+        // px-4/pt-1.5: Platz für die überstehenden Platz-Abzeichen (sonst schneidet overflow sie ab).
+        <div className="flex-1 overflow-y-auto overscroll-none min-h-0 px-4 pt-1.5 pb-4">
+          <div className="flex flex-col gap-2.5">
+            {sorted.map((entry) => (
+              <LeaderboardRow
+                key={entry.user_id}
+                entry={entry}
+                rank={pointsRank.get(entry.user_id) ?? 0}
+                isMe={entry.user_id === user?.id}
+                certified={certified.has(entry.user_id)}
+                avatarUrl={avatars.get(entry.user_id) ?? null}
+                frame={frames.get(entry.user_id) ?? null}
+                onOpen={() => navigate(`${base}/profile/${entry.user_id}`)}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>

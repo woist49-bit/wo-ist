@@ -32,7 +32,8 @@ export function LeaderboardHeader({ variant, title, subtitle, sort, onSort }: {
   const v = VARIANTS[variant]
   const display = title ?? v.title
   return (
-    <div className={`rounded-2xl px-4 py-3 mb-4 text-white ${v.bg} ${v.shadow}`}>
+    // Fester Kopf (flex-shrink-0): bleibt oben, nur die Namensliste darunter scrollt.
+    <div className={`flex-shrink-0 rounded-2xl px-4 py-3 mb-4 text-white ${v.bg} ${v.shadow}`}>
       <div className="flex items-center gap-2.5">
         {variant === 'global' ? <Crown size={28} strokeWidth={2.5} className="flex-shrink-0" />
           : variant === 'world' ? <Trophy size={28} strokeWidth={2.5} className="flex-shrink-0" />
